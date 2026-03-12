@@ -1,5 +1,154 @@
 "use client";
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+
+// ─────────────────────────────────────────────────────────────
+// NATURE BACKGROUND — 3 layers: clouds · birds · leaves
+// Pure CSS animation, pointer-events:none, GPU-only transforms
+// ─────────────────────────────────────────────────────────────
+
+// Cloud SVG — soft organic blob
+const CloudSVG = ({ w = 90, opacity = 0.18 }) => (
+  <svg width={w} height={w * 0.55} viewBox="0 0 120 66" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display:"block"}}>
+    <ellipse cx="60" cy="44" rx="52" ry="22" fill={`rgba(200,185,165,${opacity})`}/>
+    <ellipse cx="42" cy="36" rx="28" ry="20" fill={`rgba(200,185,165,${opacity})`}/>
+    <ellipse cx="78" cy="34" rx="24" ry="18" fill={`rgba(200,185,165,${opacity})`}/>
+    <ellipse cx="60" cy="28" rx="20" ry="16" fill={`rgba(200,185,165,${opacity})`}/>
+  </svg>
+);
+
+// Bird SVG — simple M-curve wings, single stroke
+const BirdSVG = ({ size = 18, color = "rgba(156,140,120,0.45)" }) => (
+  <svg width={size * 2.2} height={size} viewBox="0 0 44 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22 10 Q14 2 4 6" stroke={color} strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+    <path d="M22 10 Q30 2 40 6" stroke={color} strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+  </svg>
+);
+
+// Leaf SVG — simple teardrop
+const LeafSVG = ({ size = 14, color = "rgba(156,140,120,0.35)" }) => (
+  <svg width={size} height={size * 1.4} viewBox="0 0 20 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 2 Q18 10 10 26 Q2 10 10 2Z" fill={color}/>
+    <line x1="10" y1="4" x2="10" y2="24" stroke="rgba(156,140,120,0.2)" strokeWidth="0.8"/>
+  </svg>
+);
+
+// Cloud configs — vary size, speed, Y position, delay
+const CLOUDS = [
+  { id:"c1", w:140, y:"8%",  dur:55, delay:0,   opacity:0.13 },
+  { id:"c2", w:90,  y:"4%",  dur:70, delay:-18, opacity:0.10 },
+  { id:"c3", w:110, y:"14%", dur:62, delay:-35, opacity:0.11 },
+  { id:"c4", w:70,  y:"20%", dur:80, delay:-50, opacity:0.08 },
+  { id:"c5", w:120, y:"3%",  dur:48, delay:-8,  opacity:0.09 },
+];
+
+// Bird configs — 3 birds, different Y, speed, size
+const BIRDS = [
+  { id:"b1", y:"15%", dur:18, delay:0,   size:16, flip:false },
+  { id:"b2", y:"28%", dur:24, delay:-7,  size:12, flip:false },
+  { id:"b3", y:"10%", dur:21, delay:-14, size:14, flip:false },
+  { id:"b4", y:"22%", dur:30, delay:-20, size:10, flip:true  },
+];
+
+// Leaf configs — 4 leaves, random X start, drift direction
+const LEAVES = [
+  { id:"l1", x:"15%", dur:12, delay:0,   size:13, driftX:40,  rot:200 },
+  { id:"l2", x:"45%", dur:16, delay:-5,  size:10, driftX:-30, rot:-240 },
+  { id:"l3", x:"72%", dur:14, delay:-10, size:15, driftX:50,  rot:300 },
+  { id:"l4", x:"88%", dur:18, delay:-3,  size:11, driftX:-40, rot:-180 },
+];
+
+const NatureBackground = memo(() => (
+  <div aria-hidden="true" style={{
+    position:"fixed", inset:0, zIndex:0,
+    pointerEvents:"none", overflow:"hidden",
+  }}>
+    <style>{NATURE_CSS}</style>
+
+    {/* ── Layer 1: Clouds (slowest, farthest) ── */}
+    {CLOUDS.map(c => (
+      <div key={c.id} style={{
+        position:"absolute",
+        top: c.y,
+        left:0,
+        willChange:"transform",
+        animation:`cloud-drift ${c.dur}s linear ${c.delay}s infinite`,
+      }}>
+        <CloudSVG w={c.w} opacity={c.opacity} />
+      </div>
+    ))}
+
+    {/* ── Layer 2: Birds (medium speed) ── */}
+    {BIRDS.map(b => (
+      <div key={b.id} style={{
+        position:"absolute",
+        top: b.y,
+        left:0,
+        willChange:"transform",
+        animation:`bird-fly ${b.dur}s linear ${b.delay}s infinite`,
+        transform: b.flip ? "scaleX(-1)" : undefined,
+      }}>
+        {/* Wing flap wrapper */}
+        <div style={{animation:`wing-flap 0.45s ease-in-out infinite alternate`}}>
+          <BirdSVG size={b.size} />
+        </div>
+      </div>
+    ))}
+
+    {/* ── Layer 3: Leaves (fall from top) ── */}
+    {LEAVES.map(l => (
+      <div key={l.id} style={{
+        position:"absolute",
+        top:"-30px",
+        left: l.x,
+        willChange:"transform, opacity",
+        animation:`leaf-fall ${l.dur}s ease-in ${l.delay}s infinite`,
+        "--drift": `${l.driftX}px`,
+        "--rot":   `${l.rot}deg`,
+      }}>
+        <LeafSVG size={l.size} />
+      </div>
+    ))}
+  </div>
+));
+
+const NATURE_CSS = `
+  /* Cloud drifts L→R across full viewport + a bit extra */
+  @keyframes cloud-drift {
+    from { transform: translateX(-20vw); }
+    to   { transform: translateX(115vw); }
+  }
+
+  /* Bird flies L→R with gentle sine-wave Y bob */
+  @keyframes bird-fly {
+    0%   { transform: translateX(-8vw)  translateY(0px); }
+    25%  { transform: translateX(25vw)  translateY(-18px); }
+    50%  { transform: translateX(50vw)  translateY(4px); }
+    75%  { transform: translateX(75vw)  translateY(-12px); }
+    100% { transform: translateX(112vw) translateY(0px); }
+  }
+
+  /* Wing flap — tiny vertical squish on the SVG */
+  @keyframes wing-flap {
+    from { transform: scaleY(1);    }
+    to   { transform: scaleY(0.72); }
+  }
+
+  /* Leaf falls top→bottom with horizontal drift + rotation */
+  @keyframes leaf-fall {
+    0%   { transform: translateY(-30px)   translateX(0px)          rotate(0deg);   opacity:0;    }
+    8%   { opacity: 0.7; }
+    90%  { opacity: 0.5; }
+    100% { transform: translateY(105vh)   translateX(var(--drift))  rotate(var(--rot)); opacity:0; }
+  }
+
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    [style*="cloud-drift"], [style*="bird-fly"], [style*="leaf-fall"], [style*="wing-flap"] {
+      animation: none !important;
+    }
+  }
+`;
+
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -203,14 +352,23 @@ export default function JobDiscovery() {
   );
 
   return (
-    <div style={{background:"#F4EFE8",minHeight:"100vh",fontFamily:"'Jost',sans-serif",color:"#28200F"}}>
+    <div style={{
+      background:"linear-gradient(180deg,#EDE5D5 0%,#F4EFE8 30%,#F0EAE0 100%)",
+      minHeight:"100vh",fontFamily:"'Jost',sans-serif",color:"#28200F",position:"relative",
+    }}>
       <style>{CSS}</style>
+
+      {/* ══════════════════ NATURE BACKGROUND ══════════════════ */}
+      <NatureBackground />
 
       {/* ══════════════════ HEADER — flows with page ══════════════════ */}
       <header style={{
-        background:"#FFFFFF",
+        background:"rgba(255,252,248,0.88)",
+        backdropFilter:"blur(12px)",
+        WebkitBackdropFilter:"blur(12px)",
         borderBottom:"1.5px solid var(--border)",
-        boxShadow:"0 2px 16px rgba(40,32,15,0.07)",
+        boxShadow:"0 2px 16px rgba(40,32,15,0.06)",
+        position:"relative", zIndex:10,
       }}>
         <div style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"14px":"24px"} ${P}`}}>
 
@@ -396,7 +554,7 @@ export default function JobDiscovery() {
       </header>
 
       {/* ══════════════════ MAIN ══════════════════ */}
-      <main style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`}}>
+      <main style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`,position:"relative",zIndex:1}}>
 
         {/* Mobile: active filter summary */}
         {isMobile && isFiltering && (
