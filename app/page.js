@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -24,7 +24,7 @@ const TAG_CFG = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// HOOK — responsive breakpoint
+// HOOK
 // ─────────────────────────────────────────────────────────────
 function useIsMobile(bp = 768) {
   const [mobile, setMobile] = useState(() =>
@@ -39,54 +39,7 @@ function useIsMobile(bp = 768) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// HOOK — scroll: manipulates DOM directly, zero React re-renders
-// ─────────────────────────────────────────────────────────────
-function useScrollDOM(headerRef, filterRowsRef, collapsedBarRef) {
-  useEffect(() => {
-    const header = headerRef.current;
-    const rows   = filterRowsRef.current;
-    if (!header || !rows) return;
-
-    let isCollapsed = false;
-
-    const apply = (collapse) => {
-      if (collapse === isCollapsed) return;
-      isCollapsed = collapse;
-      const bar = collapsedBarRef.current;
-      if (collapse) {
-        rows.style.maxHeight     = "0px";
-        rows.style.opacity       = "0";
-        rows.style.marginTop     = "0px";
-        rows.style.pointerEvents = "none";
-        header.classList.add("header-collapsed");
-        if (bar) bar.style.display = "flex";
-      } else {
-        rows.style.maxHeight     = "400px";
-        rows.style.opacity       = "1";
-        rows.style.marginTop     = "16px";
-        rows.style.pointerEvents = "";
-        header.classList.remove("header-collapsed");
-        if (bar) bar.style.display = "none";
-      }
-    };
-
-    // IntersectionObserver fires only on threshold cross — zero jank
-    const sentinel = document.createElement("div");
-    sentinel.style.cssText = "position:absolute;top:80px;height:1px;width:1px;pointer-events:none;left:0;";
-    document.body.prepend(sentinel);
-
-    const obs = new IntersectionObserver(
-      ([entry]) => apply(!entry.isIntersecting),
-      { threshold: 0 }
-    );
-    obs.observe(sentinel);
-
-    return () => { obs.disconnect(); sentinel.remove(); };
-  }, []);
-}
-
-// ─────────────────────────────────────────────────────────────
-// DATA PIPELINE
+// DATA
 // ─────────────────────────────────────────────────────────────
 function parseSalary(raw) {
   if (!raw) return 0;
@@ -158,53 +111,18 @@ function deriveOptions(jobs) {
 // ─────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────
-export default function JobDiscoveryFinal() {
+export default function JobDiscovery() {
   const isMobile = useIsMobile();
-  const [jobs, setJobs]       = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [jobs, setJobs]         = useState([]);
+  const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null);
-  const [search, setSearch]   = useState("");
-  const [salary, setSalary]   = useState([0, 50]);
-  const [opts, setOpts]       = useState({ areas:[], districts:[], levels:[] });
-  const [filters, setFilters] = useState({ preset:"All", areas:[], districts:[], levels:[] });
+  const [search, setSearch]     = useState("");
+  const [salary, setSalary]     = useState([0, 50]);
+  const [opts, setOpts]         = useState({ areas:[], districts:[], levels:[] });
+  const [filters, setFilters]   = useState({ preset:"All", areas:[], districts:[], levels:[] });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const headerRef      = useRef(null);
-  const filterRowsRef  = useRef(null);
-  const collapsedBarRef = useRef(null);
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
-  // DOM-direct scroll — zero React re-renders
-  useScrollDOM(headerRef, filterRowsRef, collapsedBarRef);
-
-  // Keep CSS var --header-h in sync so main never hides under fixed header
-  useEffect(() => {
-    const el = document.getElementById("site-header-el");
-    if (!el) return;
-    const update = () => {
-      document.documentElement.style.setProperty("--header-h", el.offsetHeight + "px");
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Scroll progress bar — pure DOM, no re-render
-  useEffect(() => {
-    let raf = null;
-    const bar = document.getElementById("scroll-progress-bar");
-    const update = () => {
-      raf = null;
-      if (!bar) return;
-      const docH = document.documentElement.scrollHeight - window.innerHeight;
-      const pct  = docH > 0 ? Math.min(100, (window.scrollY / docH) * 100) : 0;
-      bar.style.width = pct + "%";
-    };
-    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => { window.removeEventListener("scroll", onScroll); if (raf) cancelAnimationFrame(raf); };
-  }, []);
-
-  // Lock body scroll when panel/drawer open on mobile
   useEffect(() => {
     if (isMobile && (selected || drawerOpen)) {
       document.body.style.overflow = "hidden";
@@ -273,6 +191,8 @@ export default function JobDiscoveryFinal() {
   const verN   = jobs.filter(j => j.isVerified).length;
   const emailN = jobs.filter(j => j["Email"] && j["Email"] !== "Không rõ").length;
 
+  const P = isMobile ? "16px" : "32px";
+
   if (loading) return (
     <div style={{background:"#F4EFE8",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
@@ -282,138 +202,203 @@ export default function JobDiscoveryFinal() {
     </div>
   );
 
-  const P = isMobile ? "16px" : "32px";
-
   return (
     <div style={{background:"#F4EFE8",minHeight:"100vh",fontFamily:"'Jost',sans-serif",color:"#28200F"}}>
       <style>{CSS}</style>
 
-      {/* ══════════════════ HEADER ══════════════════ */}
-      <header
-        ref={headerRef}
-        className="site-header"
-        id="site-header-el" style={{position:"fixed",top:0,left:0,right:0,zIndex:100}}
-      >
-        {/* Scroll progress bar — updated by separate effect */}
-        <div className="scroll-progress" id="scroll-progress-bar" />
+      {/* ══════════════════ HEADER — flows with page ══════════════════ */}
+      <header style={{
+        background:"#FFFFFF",
+        borderBottom:"1.5px solid var(--border)",
+        boxShadow:"0 2px 16px rgba(40,32,15,0.07)",
+      }}>
+        <div style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"14px":"24px"} ${P}`}}>
 
-        <div style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"14px":"20px"} ${P}`}}>
-
-          {/* ── Row A: brand + search + stats ── */}
-          <div className="header-row-a" style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          {/* Row A: brand + search + stats */}
+          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
 
             {/* Brand */}
             <div style={{flexShrink:0,paddingRight:isMobile?0:20,borderRight:isMobile?"none":"1.5px solid var(--border)"}}>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:isMobile?26:32,fontWeight:700,letterSpacing:"-0.01em",color:"var(--ink)",lineHeight:1}}>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:isMobile?26:34,fontWeight:700,letterSpacing:"-0.01em",color:"var(--ink)",lineHeight:1}}>
                 DA NANG<span style={{color:"var(--acc)"}}>Ecom</span>
               </div>
-              <div style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",letterSpacing:"0.16em",textTransform:"uppercase",marginTop:3}}>
+              <div style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",letterSpacing:"0.16em",textTransform:"uppercase",marginTop:4}}>
                 {jobs.length} jobs · <span style={{color:"var(--green)"}}>{todayN} mới hôm nay</span>
               </div>
             </div>
 
             {/* Search */}
-            <div style={{flex:1,minWidth:0,position:"relative"}}>
-              <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16,opacity:0.4,pointerEvents:"none"}}>🔍</span>
-              <input className="sinput" style={{paddingLeft:44}} type="text" value={search}
+            <div style={{flex:1,minWidth:180,position:"relative"}}>
+              <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16,opacity:0.35,pointerEvents:"none"}}>🔍</span>
+              <input
+                className="sinput"
+                style={{paddingLeft:44}}
+                type="text"
+                value={search}
                 placeholder={isMobile ? "Tìm vị trí, kỹ năng..." : "Tìm vị trí, công ty, kỹ năng, quận..."}
-                onChange={e => setSearch(e.target.value)} />
-              {/* Clear button */}
+                onChange={e => setSearch(e.target.value)}
+              />
               {search && (
-                <button className="search-clear" onClick={() => setSearch("")} title="Xoá">✕</button>
+                <button className="search-clear" onClick={() => setSearch("")}>✕</button>
               )}
             </div>
 
-            {/* Stats — desktop only */}
+            {/* Stats — desktop */}
             {!isMobile && (
-              <div style={{display:"flex",gap:20,flexShrink:0,paddingLeft:20,borderLeft:"1.5px solid var(--border)"}}>
-                {[{v:jobs.length,l:"Active",c:"var(--ink)"},{v:todayN,l:"Hôm nay",c:"var(--green)"},{v:verN,l:"Verified",c:"var(--acc)"},{v:emailN,l:"Có Email",c:"var(--ink)"}].map(({v,l,c})=>(
-                  <div key={l} className="stat-item" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,fontWeight:700,color:c}}>{v}</span>
+              <div style={{display:"flex",gap:24,flexShrink:0,paddingLeft:20,borderLeft:"1.5px solid var(--border)"}}>
+                {[
+                  {v:jobs.length, l:"Active",   c:"var(--ink)"},
+                  {v:todayN,      l:"Hôm nay",  c:"var(--green)"},
+                  {v:verN,        l:"Verified", c:"var(--acc)"},
+                  {v:emailN,      l:"Có Email", c:"var(--ink)"},
+                ].map(({v,l,c}) => (
+                  <div key={l} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:c,lineHeight:1}}>{v}</span>
                     <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>{l}</span>
                   </div>
                 ))}
               </div>
             )}
-          </div>
 
-          {/* ── Collapsible filter rows ── */}
-          <div
-            ref={filterRowsRef}
-            className="filter-rows-wrapper"
-            style={{
-              marginTop:"16px",
-              transformOrigin:"top center",
-              transition:"transform 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.26s ease",
-              willChange:"transform, opacity"
-            }}
-          >
-
-            {/* Row B: preset chips */}
-            <div className="header-row-b" style={{display:"flex",gap:8,overflowX:"auto",scrollbarWidth:"none",paddingBottom:isMobile?4:0,flexWrap:isMobile?"nowrap":"wrap"}}>
-              {[
-                {k:"New",e:"🕐",l:"Mới nhất"},
-                {k:"HighSalary",e:"💰",l:"Lương >15M"},
-                {k:"Remote",e:"💻",l:"Remote"},
-                {k:"POD",e:"🚀",l:"POD Only"},
-                {k:"EasyApply",e:"🎯",l:"Easy Apply"},
-              ].map(({k,e,l}) => (
-                <button key={k} className={`preset-chip${filters.preset===k?" on":""}`}
-                  onClick={() => setFilters(f => ({...f, preset:f.preset===k?"All":k}))}>
-                  <span>{e}</span>{l}
-                </button>
-              ))}
-              {!isMobile && isFiltering && (
-                <button onClick={reset} className="reset-btn">✕ Reset</button>
-              )}
-            </div>
-
-            {/* Row C: advanced filters — desktop only */}
+            {/* Toggle filter button (desktop) */}
             {!isMobile && (
-              <div className="header-row-c" style={{display:"flex",gap:20,flexWrap:"wrap",alignItems:"flex-start"}}>
-                {opts.areas.length > 0 && (
-                  <FilterBlock label="Khu vực">
-                    {opts.areas.map(a => <button key={a} className={`fpill${filters.areas.includes(a)?" on":""}`} onClick={() => toggle("areas",a)}>{AREA_LABELS[a]||a}</button>)}
-                  </FilterBlock>
+              <button
+                onClick={() => setFiltersOpen(o => !o)}
+                style={{
+                  flexShrink:0,
+                  display:"flex",alignItems:"center",gap:7,
+                  padding:"10px 16px",
+                  background: filtersOpen ? "var(--ink)" : "white",
+                  color: filtersOpen ? "var(--bg)" : "var(--ink2)",
+                  border:"1.5px solid var(--border)",
+                  borderRadius:6,
+                  cursor:"pointer",
+                  fontFamily:"'Jost',sans-serif",
+                  fontSize:13,
+                  fontWeight:600,
+                  letterSpacing:"0.04em",
+                  transition:"all 0.2s ease",
+                }}
+              >
+                <span style={{fontSize:14}}>⚙️</span>
+                Bộ lọc
+                {activeCount > 0 && (
+                  <span style={{
+                    background: filtersOpen ? "rgba(255,255,255,0.25)" : "var(--acc)",
+                    color:"white",
+                    borderRadius:20,
+                    padding:"1px 8px",
+                    fontSize:11,
+                    fontWeight:700,
+                  }}>{activeCount}</span>
                 )}
-                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-                {opts.districts.length > 0 && (
-                  <FilterBlock label="Quận">
-                    {opts.districts.map(d => <button key={d} className={`fpill${filters.districts.includes(d)?" on":""}`} onClick={() => toggle("districts",d)}>{d}</button>)}
-                  </FilterBlock>
-                )}
-                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-                {opts.levels.length > 0 && (
-                  <FilterBlock label="Level">
-                    {opts.levels.map(l => <button key={l} className={`fpill${filters.levels.includes(l)?" on":""}`} onClick={() => toggle("levels",l)}>{l}</button>)}
-                  </FilterBlock>
-                )}
-                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-                <SalaryFilter salary={salary} setSalary={setSalary} />
-              </div>
+              </button>
             )}
           </div>
 
-          {/* ── Collapsed filter summary bar — shown/hidden by scroll hook ── */}
-          {activeCount > 0 && (
-            <div ref={collapsedBarRef} className="collapsed-filter-bar" style={{opacity:0,pointerEvents:"none",transition:"opacity 0.22s ease"}}>
-              <span className="collapsed-filter-label">Lọc:</span>
-              {filters.preset !== "All" && <span className="collapsed-chip">{filters.preset}</span>}
-              {filters.areas.map(a => <span key={a} className="collapsed-chip">{a}</span>)}
-              {filters.districts.map(d => <span key={d} className="collapsed-chip">{d}</span>)}
-              {filters.levels.map(l => <span key={l} className="collapsed-chip">{l}</span>)}
-              {(salary[0]>0||salary[1]<50) && <span className="collapsed-chip">{salary[0]}M–{salary[1]}M</span>}
-              <span className="collapsed-count">{processed.length} kết quả</span>
-              <button className="collapsed-reset" onClick={reset}>✕</button>
+          {/* ── Filter panel — collapsible, desktop only ── */}
+          {!isMobile && (
+            <div
+              className="filter-panel"
+              style={{
+                maxHeight: filtersOpen ? "500px" : "0px",
+                opacity: filtersOpen ? 1 : 0,
+                overflow:"hidden",
+                transition:"max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease",
+              }}
+            >
+              <div style={{borderTop:"1px solid var(--border)",paddingTop:18,marginTop:16,display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-start"}}>
+
+                {/* Preset chips */}
+                <div style={{display:"flex",flexDirection:"column",gap:10,flexShrink:0}}>
+                  <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.18em",color:"var(--ink3)"}}>Quick</span>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {[
+                      {k:"New",e:"🕐",l:"Mới nhất"},
+                      {k:"HighSalary",e:"💰",l:"Lương >15M"},
+                      {k:"Remote",e:"💻",l:"Remote"},
+                      {k:"POD",e:"🚀",l:"POD Only"},
+                      {k:"EasyApply",e:"🎯",l:"Easy Apply"},
+                    ].map(({k,e,l}) => (
+                      <button
+                        key={k}
+                        className={`preset-chip${filters.preset===k?" on":""}`}
+                        onClick={() => setFilters(f => ({...f, preset:f.preset===k?"All":k}))}
+                      >
+                        <span>{e}</span>{l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
+
+                {opts.areas.length > 0 && (
+                  <FilterBlock label="Khu vực">
+                    {opts.areas.map(a => (
+                      <button key={a} className={`fpill${filters.areas.includes(a)?" on":""}`} onClick={() => toggle("areas",a)}>
+                        {AREA_LABELS[a]||a}
+                      </button>
+                    ))}
+                  </FilterBlock>
+                )}
+
+                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
+
+                {opts.districts.length > 0 && (
+                  <FilterBlock label="Quận">
+                    {opts.districts.map(d => (
+                      <button key={d} className={`fpill${filters.districts.includes(d)?" on":""}`} onClick={() => toggle("districts",d)}>
+                        {d}
+                      </button>
+                    ))}
+                  </FilterBlock>
+                )}
+
+                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
+
+                {opts.levels.length > 0 && (
+                  <FilterBlock label="Level">
+                    {opts.levels.map(l => (
+                      <button key={l} className={`fpill${filters.levels.includes(l)?" on":""}`} onClick={() => toggle("levels",l)}>
+                        {l}
+                      </button>
+                    ))}
+                  </FilterBlock>
+                )}
+
+                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
+
+                <SalaryFilter salary={salary} setSalary={setSalary} />
+
+                {isFiltering && (
+                  <button onClick={reset} className="reset-btn" style={{alignSelf:"flex-end"}}>✕ Reset</button>
+                )}
+              </div>
             </div>
           )}
+
+          {/* Active filter summary (desktop, filters closed) */}
+          {!isMobile && !filtersOpen && activeCount > 0 && (
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:12,flexWrap:"wrap"}}>
+              <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Lọc:</span>
+              {filters.preset !== "All" && <Chip>{filters.preset}</Chip>}
+              {filters.areas.map(a => <Chip key={a}>{a}</Chip>)}
+              {filters.districts.map(d => <Chip key={d}>{d}</Chip>)}
+              {filters.levels.map(l => <Chip key={l}>{l}</Chip>)}
+              {(salary[0]>0||salary[1]<50) && <Chip>{salary[0]}M–{salary[1]}M</Chip>}
+              <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--green)",fontWeight:700,marginLeft:4}}>{processed.length} kết quả</span>
+              <button onClick={reset} style={{fontSize:11,fontWeight:700,color:"var(--red)",background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:4,padding:"3px 10px",cursor:"pointer",fontFamily:"'Jost',sans-serif",marginLeft:4}}>✕</button>
+            </div>
+          )}
+
         </div>
       </header>
 
       {/* ══════════════════ MAIN ══════════════════ */}
-      <main id="site-main" style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`,paddingTop:"var(--header-h,80px)"}}>
+      <main style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`}}>
 
-        {/* Mobile: active filter summary bar */}
+        {/* Mobile: active filter summary */}
         {isMobile && isFiltering && (
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
             <span style={{fontFamily:"Inconsolata,monospace",fontSize:12,color:"var(--ink3)"}}>{processed.length} kết quả</span>
@@ -429,11 +414,14 @@ export default function JobDiscoveryFinal() {
         {isFiltering ? (
           <section>
             <SectionHead icon="🔍" title={isMobile?"Kết Quả":"Kết Quả Tìm Kiếm"} sub={`${processed.length} vị trí phù hợp`} isMobile={isMobile} />
-            {processed.length === 0 ? <Empty onReset={reset} /> : (
-              <div className="card-grid">
-                {processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} isMobile={isMobile} idx={i} />)}
-              </div>
-            )}
+            {processed.length === 0
+              ? <Empty onReset={reset} />
+              : (
+                <div className="card-grid">
+                  {processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} isMobile={isMobile} idx={i} />)}
+                </div>
+              )
+            }
           </section>
         ) : (
           <>
@@ -451,7 +439,7 @@ export default function JobDiscoveryFinal() {
         )}
       </main>
 
-      {/* ══════════════════ MOBILE: FILTER FAB ══════════════════ */}
+      {/* ══════════════════ MOBILE FILTER FAB ══════════════════ */}
       {isMobile && (
         <button className="filter-fab" onClick={() => setDrawerOpen(true)}>
           <span style={{fontSize:16}}>⚙️</span>
@@ -459,7 +447,7 @@ export default function JobDiscoveryFinal() {
         </button>
       )}
 
-      {/* ══════════════════ MOBILE: FILTER DRAWER ══════════════════ */}
+      {/* ══════════════════ MOBILE FILTER DRAWER ══════════════════ */}
       {isMobile && drawerOpen && (
         <FilterDrawer
           opts={opts} filters={filters} salary={salary}
@@ -476,7 +464,7 @@ export default function JobDiscoveryFinal() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CSS STRING
+// CSS
 // ─────────────────────────────────────────────────────────────
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Jost:wght@400;500;600;700&family=Inconsolata:wght@600&display=swap');
@@ -487,212 +475,132 @@ const CSS = `
     --acc:#B8621A; --acc2:#F0DCC8; --green:#3E6B48; --red:#A83030;
     --shadow:0 2px 12px rgba(40,32,15,0.07);
     --shadow2:0 8px 32px rgba(40,32,15,0.12);
-    --header-transition: 0.38s cubic-bezier(0.4,0,0.2,1);
   }
-  html { scroll-behavior:smooth; -webkit-text-size-adjust:100%; }
+  html { -webkit-text-size-adjust:100%; }
   ::-webkit-scrollbar { width:4px; height:4px; }
   ::-webkit-scrollbar-track { background:var(--bg2); }
   ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 
-  /* ══════════════════════════════════
-     HEADER — sticky with collapse
-  ══════════════════════════════════ */
-  .site-header {
-    background: rgba(255,255,255,0.97);
-    border-bottom: 1.5px solid var(--border);
-    box-shadow: 0 2px 20px rgba(40,32,15,0.08);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+  .sinput {
+    width:100%; padding:12px 18px; border:1.5px solid var(--border);
+    background:white; font-size:16px; font-family:'Jost',sans-serif;
+    color:var(--ink); outline:none; border-radius:6px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    -webkit-appearance:none;
   }
-  .site-header.header-collapsed {
-    box-shadow: 0 4px 24px rgba(40,32,15,0.13);
-  }
-
-  /* Filter rows — GPU-only collapse via transform+opacity, never max-height */
-  .filter-rows-wrapper {
-    overflow: hidden;
-    /* height is set once via JS offsetHeight measurement */
-    /* transition is set as inline style to avoid cascade conflicts */
-  }
-
-  /* Row B spacing */
-  .header-row-b { padding-bottom: 16px; }
-  @media(max-width:767px) { .header-row-b { padding-bottom: 4px; } }
-
-  /* Row C spacing */
-  .header-row-c { border-top: 1px solid var(--border); padding-top: 16px; }
-
-  /* ── Scroll progress bar ── */
-  .scroll-progress {
-    position: absolute;
-    top: 0; left: 0;
-    height: 2px;
-    width: 0%;
-    background: linear-gradient(90deg, var(--acc), #E09060);
-    transition: width 0.08s linear;
-    z-index: 10;
-    will-change: width;
-  }
-  /* ── Collapsed filter summary bar ── */
-  .collapsed-filter-bar {
-    align-items: center; gap: 6px; flex-wrap: nowrap;
-    overflow-x: auto; scrollbar-width: none;
-    padding: 8px 0 4px; border-top: 1px solid var(--border); margin-top: 10px;
-  }
-  .collapsed-filter-label { font-family:Inconsolata,monospace; font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:0.1em; white-space:nowrap; flex-shrink:0; }
-  .collapsed-chip { display:inline-flex; align-items:center; padding:3px 10px; font-size:11px; font-weight:700; font-family:Inconsolata,monospace; background:var(--ink); color:var(--bg); border-radius:20px; white-space:nowrap; flex-shrink:0; letter-spacing:0.04em; }
-  .collapsed-count { font-family:Inconsolata,monospace; font-size:11px; color:var(--green); font-weight:700; margin-left:auto; white-space:nowrap; flex-shrink:0; }
-  .collapsed-reset { flex-shrink:0; padding:3px 8px; font-size:11px; font-weight:700; color:var(--red); background:#FEF0F0; border:1px solid #F5AAAA; border-radius:4px; cursor:pointer; font-family:'Jost',sans-serif; }
+  .sinput:focus { border-color:var(--acc); box-shadow:0 0 0 3px rgba(184,98,26,0.08); }
+  .sinput::placeholder { color:var(--ink3); }
 
   .search-clear {
-    position: absolute;
-    right: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--bg3);
-    border: none;
-    font-size: 11px;
-    cursor: pointer;
-    color: var(--ink3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position:absolute; right:14px; top:50%; transform:translateY(-50%);
+    width:24px; height:24px; border-radius:50%; background:var(--bg3);
+    border:none; font-size:11px; cursor:pointer; color:var(--ink3);
+    display:flex; align-items:center; justify-content:center;
     transition: background 0.15s, color 0.15s;
   }
-  .search-clear:hover { background: var(--ink); color: white; }
+  .search-clear:hover { background:var(--ink); color:white; }
 
-  /* ── preset chips ── */
   .preset-chip {
     display:inline-flex; align-items:center; gap:7px;
-    padding:10px 18px; font-size:14px; font-weight:600;
-    letter-spacing:0.02em; border:1.5px solid var(--border);
-    background:white; color:var(--ink2); cursor:pointer;
+    padding:9px 16px; font-size:13px; font-weight:600; letter-spacing:0.02em;
+    border:1.5px solid var(--border); background:white; color:var(--ink2);
+    cursor:pointer; border-radius:6px; font-family:'Jost',sans-serif; flex-shrink:0;
     transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
-    white-space:nowrap; border-radius:4px;
-    font-family:'Jost',sans-serif; flex-shrink:0;
-    -webkit-tap-highlight-color:transparent;
-    position: relative;
-    overflow: hidden;
+    white-space:nowrap; -webkit-tap-highlight-color:transparent;
   }
-  .preset-chip::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--acc);
-    opacity: 0;
-    transition: opacity 0.2s;
-    border-radius: inherit;
-  }
-  .preset-chip:hover { border-color:var(--acc); color:var(--acc); background:#FFF8F2; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(184,98,26,0.15); }
-  .preset-chip.on { background:var(--ink); color:var(--bg); border-color:var(--ink); transform: scale(1.02); box-shadow: 0 4px 14px rgba(40,32,15,0.2); }
-  .preset-chip:active { transform: scale(0.97); }
+  .preset-chip:hover { border-color:var(--acc); color:var(--acc); background:#FFF8F2; transform:translateY(-1px); box-shadow:0 4px 12px rgba(184,98,26,0.15); }
+  .preset-chip.on { background:var(--ink); color:var(--bg); border-color:var(--ink); transform:scale(1.02); box-shadow:0 4px 14px rgba(40,32,15,0.2); }
+  .preset-chip:active { transform:scale(0.97); }
 
-  /* ── filter pills ── */
   .fpill {
     display:inline-flex; align-items:center;
-    padding:9px 18px; font-size:14px; font-weight:600;
+    padding:7px 16px; font-size:13px; font-weight:600;
     border:1.5px solid var(--border); background:white; color:var(--ink2);
-    cursor:pointer; border-radius:40px;
+    cursor:pointer; border-radius:40px; font-family:'Jost',sans-serif;
     transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
-    white-space:nowrap; font-family:'Jost',sans-serif;
-    min-height:44px; -webkit-tap-highlight-color:transparent;
+    white-space:nowrap; min-height:38px; -webkit-tap-highlight-color:transparent;
   }
-  .fpill:hover { border-color:var(--acc); color:var(--acc); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(184,98,26,0.12); }
-  .fpill.on { background:var(--ink); color:var(--bg); border-color:var(--ink); transform: scale(1.02); box-shadow: 0 4px 14px rgba(40,32,15,0.2); }
-  .fpill:active { transform: scale(0.97); }
+  .fpill:hover { border-color:var(--acc); color:var(--acc); transform:translateY(-1px); box-shadow:0 3px 10px rgba(184,98,26,0.12); }
+  .fpill.on { background:var(--ink); color:var(--bg); border-color:var(--ink); box-shadow:0 4px 14px rgba(40,32,15,0.2); }
+  .fpill:active { transform:scale(0.97); }
 
-  /* ── reset btn ── */
   .reset-btn {
-    margin-left:auto; padding:10px 16px; font-size:12px; font-weight:700;
+    padding:9px 16px; font-size:12px; font-weight:700;
     color:var(--red); background:#FEF0F0; border:1.5px solid #F5AAAA;
-    border-radius:4px; cursor:pointer; font-family:'Jost',sans-serif;
-    letter-spacing:0.06em;
+    border-radius:4px; cursor:pointer; font-family:'Jost',sans-serif; letter-spacing:0.06em;
     transition: all 0.18s ease;
   }
-  .reset-btn:hover { background: var(--red); color: white; border-color: var(--red); transform: translateY(-1px); }
+  .reset-btn:hover { background:var(--red); color:white; border-color:var(--red); }
 
-  /* ── cards ── */
+  input[type=range] {
+    -webkit-appearance:none; width:100%; height:4px;
+    background:var(--bg3); outline:none; cursor:pointer; border-radius:2px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:22px; height:22px;
+    background:var(--ink); border-radius:50%; cursor:pointer;
+    border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.18);
+    transition:transform 0.15s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform:scale(1.2); }
+
   .jcard {
-    background:white; border:1.5px solid var(--border);
-    border-radius:8px; cursor:pointer; display:flex;
-    flex-direction:column;
+    background:white; border:1.5px solid var(--border); border-radius:8px;
+    cursor:pointer; display:flex; flex-direction:column;
     transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
-    box-shadow:var(--shadow);
-    -webkit-tap-highlight-color:transparent;
+    box-shadow:var(--shadow); -webkit-tap-highlight-color:transparent;
     animation: cardIn 0.4s cubic-bezier(0.16,1,0.3,1) both;
   }
-  @keyframes cardIn {
-    from { opacity:0; transform:translateY(16px) scale(0.98); }
-    to   { opacity:1; transform:translateY(0) scale(1); }
-  }
+  @keyframes cardIn { from{opacity:0;transform:translateY(14px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
   .jcard:hover { border-color:var(--acc); box-shadow:var(--shadow2); transform:translateY(-3px) scale(1.005); }
   @media(hover:none) { .jcard:hover { transform:none; } }
-  .jcard:active { transform: scale(0.99); }
+  .jcard:active { transform:scale(0.99); }
 
-  /* ── card grid ── */
   .card-grid {
     display:grid;
     grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
     gap:16px; align-items:stretch;
   }
-  .card-grid > * { height:100%; }
-  @media(max-width:767px) {
-    .card-grid { grid-template-columns:1fr; gap:12px; }
-  }
+  @media(max-width:767px) { .card-grid { grid-template-columns:1fr; gap:12px; } }
 
-  /* ── shelf ── */
   .srow {
     display:grid;
     grid-template-columns:repeat(var(--cols,3),1fr);
     gap:16px; align-items:stretch;
   }
-  @media(max-width:767px) {
-    .srow { grid-template-columns:1fr !important; gap:12px; }
-  }
+  @media(max-width:767px) { .srow { grid-template-columns:1fr !important; gap:12px; } }
+
   .shelf-nav { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
   .nav-btn {
-    width:44px; height:44px; border-radius:50%;
-    background:white; border:1.5px solid var(--border);
-    box-shadow:0 2px 10px rgba(40,32,15,0.1);
-    cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;
-    transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
-    color:var(--ink); flex-shrink:0;
+    width:40px; height:40px; border-radius:50%; background:white;
+    border:1.5px solid var(--border); box-shadow:0 2px 8px rgba(40,32,15,0.08);
+    cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center;
+    transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1); color:var(--ink); flex-shrink:0;
     -webkit-tap-highlight-color:transparent;
   }
-  .nav-btn:hover { background:var(--ink); color:var(--bg); border-color:var(--ink); transform: scale(1.1); }
-  .nav-btn:disabled { opacity:0.3; cursor:default; transform: none !important; }
+  .nav-btn:hover { background:var(--ink); color:var(--bg); border-color:var(--ink); transform:scale(1.1); }
+  .nav-btn:disabled { opacity:0.3; cursor:default; transform:none !important; }
   .nav-btn:disabled:hover { background:white; color:var(--ink); border-color:var(--border); }
-  .nav-btn:active { transform: scale(0.95) !important; }
+  .nav-btn:active { transform:scale(0.95) !important; }
 
-  /* ── detail panel overlay ── */
   .overlay {
-    position:fixed; inset:0; background:rgba(40,32,15,0.55);
-    z-index:200; display:flex; justify-content:flex-end;
+    position:fixed; inset:0; background:rgba(40,32,15,0.55); z-index:200;
+    display:flex; justify-content:flex-end;
     backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
     animation: overlayIn 0.25s ease;
   }
-  @keyframes overlayIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes overlayIn { from{opacity:0} to{opacity:1} }
   .panel {
     background:var(--bg); height:100%; overflow-y:auto; display:flex;
     flex-direction:column; animation:slideIn 0.32s cubic-bezier(0.16,1,0.3,1);
   }
   @keyframes slideIn { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
-
-  /* ── mobile: panel becomes bottom sheet ── */
   @media(max-width:767px) {
     .overlay { align-items:flex-end; justify-content:center; }
-    .panel {
-      width:100% !important; height:92dvh !important;
-      border-radius:20px 20px 0 0;
-      animation:slideUp 0.35s cubic-bezier(0.16,1,0.3,1);
-    }
+    .panel { width:100% !important; height:92dvh !important; border-radius:20px 20px 0 0; animation:slideUp 0.35s cubic-bezier(0.16,1,0.3,1); }
     @keyframes slideUp { from{opacity:0;transform:translateY(50px)} to{opacity:1;transform:translateY(0)} }
   }
 
-  /* ── filter drawer ── */
   .filter-overlay {
     position:fixed; inset:0; z-index:300;
     background:rgba(40,32,15,0.5); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
@@ -708,7 +616,6 @@ const CSS = `
   @keyframes sheetUp { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
   .sheet-handle { width:36px; height:4px; background:var(--border); border-radius:2px; margin:12px auto 0; }
 
-  /* ── filter FAB ── */
   .filter-fab {
     position:fixed; bottom:24px; right:20px; z-index:90;
     background:var(--ink); color:var(--bg); border:none;
@@ -720,154 +627,48 @@ const CSS = `
     bottom:calc(24px + env(safe-area-inset-bottom,0px));
     transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s ease;
   }
-  .filter-fab:hover { transform: translateY(-2px) scale(1.04); box-shadow:0 12px 32px rgba(40,32,15,0.36); }
-  .filter-fab:active { transform: scale(0.96); }
+  .filter-fab:hover { transform:translateY(-2px) scale(1.04); box-shadow:0 12px 32px rgba(40,32,15,0.36); }
+  .filter-fab:active { transform:scale(0.96); }
 
-  /* ── search input ── */
-  .sinput {
-    width:100%; padding:13px 18px; border:1.5px solid var(--border);
-    background:white; font-size:16px; font-family:'Jost',sans-serif;
-    color:var(--ink); outline:none; border-radius:6px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    -webkit-appearance:none;
-  }
-  .sinput:focus { border-color:var(--acc); box-shadow:0 0 0 3px rgba(184,98,26,0.08); }
-  .sinput::placeholder { color:var(--ink3); }
-
-  /* ── range sliders ── */
-  input[type=range] {
-    -webkit-appearance:none; width:100%; height:4px;
-    background:var(--bg3); outline:none; cursor:pointer; border-radius:2px;
-    transition: background 0.2s;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance:none; width:24px; height:24px;
-    background:var(--ink); border-radius:50%; cursor:pointer;
-    border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.2);
-    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1);
-  }
-  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-
-  /* ── apply button ── */
   .apply-btn {
     display:block; width:100%; padding:18px; background:var(--ink);
     color:var(--bg); font-weight:700; font-size:16px; letter-spacing:0.1em;
     text-transform:uppercase; text-align:center; text-decoration:none;
     transition: all 0.22s cubic-bezier(0.34,1.56,0.64,1);
-    border:none; cursor:pointer; border-radius:6px;
-    font-family:'Jost',sans-serif; -webkit-tap-highlight-color:transparent;
-    position: relative;
-    overflow: hidden;
+    border:none; cursor:pointer; border-radius:6px; font-family:'Jost',sans-serif;
+    -webkit-tap-highlight-color:transparent;
   }
-  .apply-btn:hover, .apply-btn:active { background:var(--acc); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(184,98,26,0.3); }
+  .apply-btn:hover { background:var(--acc); transform:translateY(-1px); box-shadow:0 6px 20px rgba(184,98,26,0.3); }
   @media(max-width:767px) { .apply-btn { padding:20px; font-size:17px; border-radius:10px; } }
 
-  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes spin { to{transform:rotate(360deg)} }
 
-  /* ── staggered card animation delays ── */
-  .card-grid > *:nth-child(1)  { animation-delay: 0.02s; }
-  .card-grid > *:nth-child(2)  { animation-delay: 0.04s; }
-  .card-grid > *:nth-child(3)  { animation-delay: 0.06s; }
-  .card-grid > *:nth-child(4)  { animation-delay: 0.08s; }
-  .card-grid > *:nth-child(5)  { animation-delay: 0.10s; }
-  .card-grid > *:nth-child(6)  { animation-delay: 0.12s; }
-  .card-grid > *:nth-child(7)  { animation-delay: 0.14s; }
-  .card-grid > *:nth-child(8)  { animation-delay: 0.16s; }
-  .card-grid > *:nth-child(n+9){ animation-delay: 0.18s; }
+  .card-grid > *:nth-child(1)  { animation-delay:0.02s }
+  .card-grid > *:nth-child(2)  { animation-delay:0.04s }
+  .card-grid > *:nth-child(3)  { animation-delay:0.06s }
+  .card-grid > *:nth-child(4)  { animation-delay:0.08s }
+  .card-grid > *:nth-child(5)  { animation-delay:0.10s }
+  .card-grid > *:nth-child(6)  { animation-delay:0.12s }
+  .card-grid > *:nth-child(7)  { animation-delay:0.14s }
+  .card-grid > *:nth-child(8)  { animation-delay:0.16s }
+  .card-grid > *:nth-child(n+9){ animation-delay:0.18s }
 `;
 
 // ─────────────────────────────────────────────────────────────
-// FILTER DRAWER (mobile bottom sheet)
+// SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────
-function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, reset, processed, onClose }) {
+function Chip({ children }) {
   return (
-    <div className="filter-overlay" onClick={onClose}>
-      <div className="filter-sheet" onClick={e => e.stopPropagation()}>
-        <div className="sheet-handle" />
-        <div style={{padding:"20px 20px 8px"}}>
-
-          {/* Header */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-            <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700,color:"var(--ink)"}}>
-              Bộ lọc
-            </span>
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={() => { reset(); }} style={{fontSize:12,fontWeight:700,color:"var(--red)",background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:4,padding:"7px 13px",cursor:"pointer",fontFamily:"'Jost',sans-serif"}}>
-                ✕ Xoá
-              </button>
-              <button onClick={onClose} style={{fontSize:13,fontWeight:700,color:"white",background:"var(--ink)",border:"none",borderRadius:4,padding:"7px 16px",cursor:"pointer",fontFamily:"'Jost',sans-serif"}}>
-                Xong ✓
-              </button>
-            </div>
-          </div>
-
-          {/* Quick presets */}
-          <DrawerBlock label="Quick filter">
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[{k:"New",e:"🕐",l:"Mới nhất"},{k:"HighSalary",e:"💰",l:"Lương >15M"},{k:"Remote",e:"💻",l:"Remote"},{k:"POD",e:"🚀",l:"POD Only"},{k:"EasyApply",e:"🎯",l:"Easy Apply"}].map(({k,e,l}) => (
-                <button key={k} className={`preset-chip${filters.preset===k?" on":""}`}
-                  onClick={() => setFilters(f => ({...f, preset:f.preset===k?"All":k}))}>
-                  <span>{e}</span>{l}
-                </button>
-              ))}
-            </div>
-          </DrawerBlock>
-
-          {opts.areas.length > 0 && (
-            <DrawerBlock label="Khu vực">
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {opts.areas.map(a => <button key={a} className={`fpill${filters.areas.includes(a)?" on":""}`} onClick={() => toggle("areas",a)}>{AREA_LABELS[a]||a}</button>)}
-              </div>
-            </DrawerBlock>
-          )}
-
-          {opts.districts.length > 0 && (
-            <DrawerBlock label="Quận">
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {opts.districts.map(d => <button key={d} className={`fpill${filters.districts.includes(d)?" on":""}`} onClick={() => toggle("districts",d)}>{d}</button>)}
-              </div>
-            </DrawerBlock>
-          )}
-
-          {opts.levels.length > 0 && (
-            <DrawerBlock label="Level">
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {opts.levels.map(l => <button key={l} className={`fpill${filters.levels.includes(l)?" on":""}`} onClick={() => toggle("levels",l)}>{l}</button>)}
-              </div>
-            </DrawerBlock>
-          )}
-
-          <DrawerBlock label={`Lương: ${salary[0]}M – ${salary[1]}M`}>
-            <div style={{display:"flex",flexDirection:"column",gap:14,paddingTop:4}}>
-              {[0,1].map(i => (
-                <div key={i} style={{display:"flex",gap:12,alignItems:"center"}}>
-                  <span style={{fontFamily:"Inconsolata,monospace",fontSize:13,color:"var(--acc)",width:32,flexShrink:0,textAlign:"right"}}>{salary[i]}M</span>
-                  <input type="range" min={0} max={50} step={1} value={salary[i]} style={{flex:1}}
-                    onChange={e => { const v = +e.target.value; setSalary(s => i===0?[v,s[1]]:[s[0],v]); }} />
-                </div>
-              ))}
-            </div>
-          </DrawerBlock>
-
-          {/* CTA */}
-          <div style={{padding:"8px 0 16px"}}>
-            <button className="apply-btn" onClick={onClose}>
-              Xem {processed.length} kết quả →
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",fontSize:11,fontWeight:700,fontFamily:"Inconsolata,monospace",background:"var(--ink)",color:"var(--bg)",borderRadius:20,whiteSpace:"nowrap",letterSpacing:"0.04em"}}>
+      {children}
+    </span>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// SUB-COMPONENTS
-// ─────────────────────────────────────────────────────────────
 function FilterBlock({ label, children }) {
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <span style={{fontFamily:"Inconsolata,monospace",fontSize:12,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.18em",color:"var(--ink3)"}}>{label}</span>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.18em",color:"var(--ink3)"}}>{label}</span>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>{children}</div>
     </div>
   );
@@ -876,7 +677,7 @@ function FilterBlock({ label, children }) {
 function SalaryFilter({ salary, setSalary }) {
   return (
     <FilterBlock label={`Lương: ${salary[0]}M – ${salary[1]}M`}>
-      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:200}}>
+      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:180}}>
         {[0,1].map(i => (
           <div key={i} style={{display:"flex",gap:8,alignItems:"center"}}>
             <span style={{fontFamily:"Inconsolata,monospace",fontSize:12,color:"var(--acc)",width:30,textAlign:"right"}}>{salary[i]}M</span>
@@ -892,9 +693,7 @@ function SalaryFilter({ salary, setSalary }) {
 function DrawerBlock({ label, children }) {
   return (
     <div style={{marginBottom:24}}>
-      <div style={{fontFamily:"Inconsolata,monospace",fontSize:12,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.16em",color:"var(--ink3)",marginBottom:12}}>
-        {label}
-      </div>
+      <div style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.16em",color:"var(--ink3)",marginBottom:12}}>{label}</div>
       {children}
     </div>
   );
@@ -912,6 +711,18 @@ function SectionHead({ icon, title, sub, isMobile }) {
   );
 }
 
+function Tag({ name }) {
+  const cfg = TAG_CFG[name] || {bg:"#EEE",color:"#444",border:"#CCC"};
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",padding:"4px 9px",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",borderRadius:3,fontFamily:"Inconsolata,monospace",background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}>
+      {name}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SHELF
+// ─────────────────────────────────────────────────────────────
 function Shelf({ icon, title, sub, jobs, onSel, isMobile }) {
   const [page, setPage] = useState(0);
   const PER = isMobile ? 2 : 3;
@@ -939,15 +750,9 @@ function Shelf({ icon, title, sub, jobs, onSel, isMobile }) {
   );
 }
 
-function Tag({ name }) {
-  const cfg = TAG_CFG[name] || {bg:"#EEE",color:"#444",border:"#CCC"};
-  return (
-    <span style={{display:"inline-flex",alignItems:"center",padding:"4px 9px",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",borderRadius:3,fontFamily:"Inconsolata,monospace",background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,transition:"transform 0.15s ease"}}>
-      {name}
-    </span>
-  );
-}
-
+// ─────────────────────────────────────────────────────────────
+// JOB CARD
+// ─────────────────────────────────────────────────────────────
 function JobCard({ job, onClick, isMobile, idx = 0 }) {
   const { salaryMax:sMax, salaryMin:sMin } = job;
   const salLabel = sMax
@@ -955,9 +760,8 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
     : "Cạnh tranh";
   const freshLabel = job.daysOld===0?"Hôm nay":job.daysOld===1?"Hôm qua":job.daysOld<99?`${job.daysOld}n`:"";
   const pad = isMobile ? "14px 16px 0" : "20px 22px 0";
-
   return (
-    <div className="jcard" onClick={onClick} style={{height:"100%", animationDelay:`${Math.min(idx * 0.04, 0.3)}s`}}>
+    <div className="jcard" onClick={onClick} style={{height:"100%",animationDelay:`${Math.min(idx*0.04,0.3)}s`}}>
       <div style={{padding:pad}}>
         <div style={{display:"flex",gap:5,flexWrap:"wrap",minHeight:22,marginBottom:10}}>
           {job.tags.slice(0,4).map(t => <Tag key={t} name={t} />)}
@@ -983,7 +787,7 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
         {job["Kỹ Năng"] && (
           <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>
             {job["Kỹ Năng"].split(",").slice(0,3).map(s=>s.trim()).filter(Boolean).map(s=>(
-              <span key={s} style={{fontSize:10,padding:"3px 9px",border:"1px solid var(--border)",color:"var(--ink3)",borderRadius:20,fontWeight:500,transition:"all 0.15s ease"}}>{s}</span>
+              <span key={s} style={{fontSize:10,padding:"3px 9px",border:"1px solid var(--border)",color:"var(--ink3)",borderRadius:20,fontWeight:500}}>{s}</span>
             ))}
           </div>
         )}
@@ -993,7 +797,7 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
         <div style={{borderTop:"1px solid var(--border)",paddingTop:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:11,color:"var(--ink3)",fontFamily:"Inconsolata,monospace"}}>Score {job.finalScore}</span>
-            <span style={{fontSize:13,fontWeight:700,color:"var(--acc)",letterSpacing:"0.04em",transition:"gap 0.15s ease"}}>Xem chi tiết →</span>
+            <span style={{fontSize:13,fontWeight:700,color:"var(--acc)",letterSpacing:"0.04em"}}>Xem chi tiết →</span>
           </div>
         </div>
       </div>
@@ -1022,10 +826,10 @@ function DetailPanel({ job, onClose, isMobile }) {
   const postedDate = rawDate ? (rawDate.split(" ")[1] || rawDate) : "";
   const freshLabel = job.daysOld===0?"hôm nay":job.daysOld===1?"hôm qua":job.daysOld<99?`${job.daysOld} ngày trước`:"";
 
-  const ImageBlock = ({ style }) => (
+  const ImageBlock = () => (
     imgUrl && !imgErr
-      ? <img src={imgUrl} alt="" onError={() => setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",...style}} />
-      : <div style={{width:"100%",height:"100%",background:grad,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:24,...style}}>
+      ? <img src={imgUrl} alt="" onError={() => setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} />
+      : <div style={{width:"100%",height:"100%",background:grad,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:24}}>
           <span style={{fontSize:56,opacity:0.2}}>🏢</span>
           <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,color:"rgba(255,255,255,0.55)",textAlign:"center",lineHeight:1.3}}>{job["Tên Công Ty"]}</span>
         </div>
@@ -1034,9 +838,10 @@ function DetailPanel({ job, onClose, isMobile }) {
   const Content = ({ padH }) => (
     <div style={{padding:`${isMobile?"18px":40}px ${padH}px ${isMobile?40:64}px`}}>
       {!isMobile && (
-        <button onClick={onClose} style={{marginBottom:32,padding:"11px 24px",fontSize:14,fontWeight:600,fontFamily:"'Jost',sans-serif",letterSpacing:"0.06em",textTransform:"uppercase",background:"white",border:"1.5px solid var(--border)",cursor:"pointer",color:"var(--ink2)",borderRadius:4,transition:"all 0.18s cubic-bezier(0.34,1.56,0.64,1)"}}
-          onMouseEnter={e=>{e.currentTarget.style.background="var(--ink)";e.currentTarget.style.color="var(--bg)";e.currentTarget.style.transform="translateY(-1px)";}}
-          onMouseLeave={e=>{e.currentTarget.style.background="white";e.currentTarget.style.color="var(--ink2)";e.currentTarget.style.transform="";}}>
+        <button onClick={onClose}
+          style={{marginBottom:32,padding:"11px 24px",fontSize:14,fontWeight:600,fontFamily:"'Jost',sans-serif",letterSpacing:"0.06em",textTransform:"uppercase",background:"white",border:"1.5px solid var(--border)",cursor:"pointer",color:"var(--ink2)",borderRadius:4,transition:"all 0.18s ease"}}
+          onMouseEnter={e=>{e.currentTarget.style.background="var(--ink)";e.currentTarget.style.color="var(--bg)";}}
+          onMouseLeave={e=>{e.currentTarget.style.background="white";e.currentTarget.style.color="var(--ink2)";}}>
           ← Đóng
         </button>
       )}
@@ -1046,12 +851,8 @@ function DetailPanel({ job, onClose, isMobile }) {
           <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 11px",fontSize:11,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",borderRadius:3,fontFamily:"Inconsolata,monospace",background:"#E8F3FC",color:"#1A5A8A",border:"1px solid #9ECEF5"}}>✓ Verified</span>
         )}
       </div>
-      <h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:isMobile?30:44,fontWeight:700,lineHeight:1.05,color:"var(--ink)",marginBottom:6}}>
-        {job["Vị Trí"]}
-      </h2>
-      <p style={{fontSize:isMobile?15:17,fontWeight:600,color:"var(--acc)",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:isMobile?12:14}}>
-        @ {job["Tên Công Ty"]}
-      </p>
+      <h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:isMobile?30:44,fontWeight:700,lineHeight:1.05,color:"var(--ink)",marginBottom:6}}>{job["Vị Trí"]}</h2>
+      <p style={{fontSize:isMobile?15:17,fontWeight:600,color:"var(--acc)",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:isMobile?12:14}}>@ {job["Tên Công Ty"]}</p>
       {postedDate && (
         <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:24,padding:"6px 14px",marginBottom:isMobile?20:28}}>
           <span style={{fontSize:13}}>📅</span>
@@ -1062,14 +863,12 @@ function DetailPanel({ job, onClose, isMobile }) {
       <div style={{height:1,background:"var(--border)",marginBottom:isMobile?18:28}} />
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:isMobile?10:14,marginBottom:isMobile?22:32}}>
         {[
-          {l:"Mức lương", v:salLabel,     a:"var(--acc)"},
+          {l:"Mức lương",v:salLabel,          a:"var(--acc)"},
           {l:"Địa điểm", v:job.district!=="Không rõ"?`${job.district}, ${job.area}`:job["Địa chỉ"]||job.area, a:"var(--green)"},
           {l:"Level",    v:job["Level"]||"—", a:"var(--ink2)"},
           {l:"Platform", v:job["Platform"]&&job["Platform"]!=="Không rõ"?job["Platform"]:"—", a:"var(--ink2)"},
         ].map(({l,v,a}) => (
-          <div key={l} style={{background:"white",border:"1.5px solid var(--border)",borderRadius:6,padding:isMobile?"12px 14px":"16px 18px",transition:"box-shadow 0.18s ease"}}
-            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(40,32,15,0.10)";}}
-            onMouseLeave={e=>{e.currentTarget.style.boxShadow="";}}>
+          <div key={l} style={{background:"white",border:"1.5px solid var(--border)",borderRadius:6,padding:isMobile?"12px 14px":"16px 18px"}}>
             <div style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:a,opacity:0.85,marginBottom:5}}>{l}</div>
             <div style={{fontSize:isMobile?14:16,fontWeight:700,color:"var(--ink)",lineHeight:1.3}}>{v}</div>
           </div>
@@ -1105,11 +904,7 @@ function DetailPanel({ job, onClose, isMobile }) {
             <div style={{height:220,flexShrink:0,position:"relative",overflow:"hidden"}}>
               <ImageBlock />
               <div style={{position:"absolute",bottom:0,left:0,right:0,height:80,background:"linear-gradient(transparent,var(--bg))",pointerEvents:"none"}} />
-              <button onClick={onClose} style={{position:"absolute",top:14,left:14,width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,0.92)",border:"none",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.15)",transition:"transform 0.15s ease"}}
-                onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.1)";}}
-                onMouseLeave={e=>{e.currentTarget.style.transform="";}}>
-                ←
-              </button>
+              <button onClick={onClose} style={{position:"absolute",top:14,left:14,width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,0.92)",border:"none",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.15)"}}>←</button>
             </div>
             <Content padH={20} />
           </div>
@@ -1128,15 +923,77 @@ function DetailPanel({ job, onClose, isMobile }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// FILTER DRAWER (mobile)
+// ─────────────────────────────────────────────────────────────
+function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, reset, processed, onClose }) {
+  return (
+    <div className="filter-overlay" onClick={onClose}>
+      <div className="filter-sheet" onClick={e => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div style={{padding:"20px 20px 8px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+            <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700,color:"var(--ink)"}}>Bộ lọc</span>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={reset} style={{fontSize:12,fontWeight:700,color:"var(--red)",background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:4,padding:"7px 13px",cursor:"pointer",fontFamily:"'Jost',sans-serif"}}>✕ Xoá</button>
+              <button onClick={onClose} style={{fontSize:13,fontWeight:700,color:"white",background:"var(--ink)",border:"none",borderRadius:4,padding:"7px 16px",cursor:"pointer",fontFamily:"'Jost',sans-serif"}}>Xong ✓</button>
+            </div>
+          </div>
+          <DrawerBlock label="Quick filter">
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {[{k:"New",e:"🕐",l:"Mới nhất"},{k:"HighSalary",e:"💰",l:"Lương >15M"},{k:"Remote",e:"💻",l:"Remote"},{k:"POD",e:"🚀",l:"POD Only"},{k:"EasyApply",e:"🎯",l:"Easy Apply"}].map(({k,e,l}) => (
+                <button key={k} className={`preset-chip${filters.preset===k?" on":""}`} onClick={() => setFilters(f => ({...f,preset:f.preset===k?"All":k}))}><span>{e}</span>{l}</button>
+              ))}
+            </div>
+          </DrawerBlock>
+          {opts.areas.length > 0 && (
+            <DrawerBlock label="Khu vực">
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {opts.areas.map(a => <button key={a} className={`fpill${filters.areas.includes(a)?" on":""}`} onClick={() => toggle("areas",a)}>{AREA_LABELS[a]||a}</button>)}
+              </div>
+            </DrawerBlock>
+          )}
+          {opts.districts.length > 0 && (
+            <DrawerBlock label="Quận">
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {opts.districts.map(d => <button key={d} className={`fpill${filters.districts.includes(d)?" on":""}`} onClick={() => toggle("districts",d)}>{d}</button>)}
+              </div>
+            </DrawerBlock>
+          )}
+          {opts.levels.length > 0 && (
+            <DrawerBlock label="Level">
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {opts.levels.map(l => <button key={l} className={`fpill${filters.levels.includes(l)?" on":""}`} onClick={() => toggle("levels",l)}>{l}</button>)}
+              </div>
+            </DrawerBlock>
+          )}
+          <DrawerBlock label={`Lương: ${salary[0]}M – ${salary[1]}M`}>
+            <div style={{display:"flex",flexDirection:"column",gap:14,paddingTop:4}}>
+              {[0,1].map(i => (
+                <div key={i} style={{display:"flex",gap:12,alignItems:"center"}}>
+                  <span style={{fontFamily:"Inconsolata,monospace",fontSize:13,color:"var(--acc)",width:32,flexShrink:0,textAlign:"right"}}>{salary[i]}M</span>
+                  <input type="range" min={0} max={50} step={1} value={salary[i]} style={{flex:1}}
+                    onChange={e => { const v = +e.target.value; setSalary(s => i===0?[v,s[1]]:[s[0],v]); }} />
+                </div>
+              ))}
+            </div>
+          </DrawerBlock>
+          <div style={{padding:"8px 0 16px"}}>
+            <button className="apply-btn" onClick={onClose}>Xem {processed.length} kết quả →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Empty({ onReset }) {
   return (
     <div style={{textAlign:"center",padding:"80px 0"}}>
-      <div style={{fontSize:48,marginBottom:12,animation:"spin 3s linear infinite"}}>🔍</div>
+      <div style={{fontSize:48,marginBottom:12}}>🔍</div>
       <p style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,color:"var(--ink2)"}}>Không tìm thấy kết quả</p>
       <p style={{fontSize:13,color:"var(--ink3)",marginTop:6,marginBottom:20}}>Thử thay đổi bộ lọc hoặc từ khóa</p>
-      <button onClick={onReset} style={{padding:"12px 28px",background:"var(--ink)",color:"var(--bg)",border:"none",cursor:"pointer",fontSize:14,fontWeight:600,borderRadius:6,fontFamily:"'Jost',sans-serif",letterSpacing:"0.06em",transition:"all 0.2s cubic-bezier(0.34,1.56,0.64,1)"}}
-        onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.background="var(--acc)";}}
-        onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.background="var(--ink)";}}>
+      <button onClick={onReset} style={{padding:"12px 28px",background:"var(--ink)",color:"var(--bg)",border:"none",cursor:"pointer",fontSize:14,fontWeight:600,borderRadius:6,fontFamily:"'Jost',sans-serif",letterSpacing:"0.06em"}}>
         Reset bộ lọc
       </button>
     </div>
