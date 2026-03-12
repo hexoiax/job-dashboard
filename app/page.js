@@ -43,52 +43,45 @@ function useIsMobile(bp = 768) {
 // ─────────────────────────────────────────────────────────────
 function useScrollDOM(headerRef, filterRowsRef, collapsedBarRef) {
   useEffect(() => {
-    let lastY = window.scrollY;
+    const header = headerRef.current;
+    const rows   = filterRowsRef.current;
+    if (!header || !rows) return;
+
     let isCollapsed = false;
-    let raf = null;
 
     const apply = (collapse) => {
       if (collapse === isCollapsed) return;
       isCollapsed = collapse;
-      const header = headerRef.current;
-      const rows   = filterRowsRef.current;
-      const bar    = collapsedBarRef.current;
-      if (!header || !rows) return;
+      const bar = collapsedBarRef.current;
       if (collapse) {
-        header.classList.add("header-collapsed");
-        rows.style.maxHeight    = "0px";
-        rows.style.opacity      = "0";
-        rows.style.marginTop    = "0";
+        rows.style.maxHeight     = "0px";
+        rows.style.opacity       = "0";
+        rows.style.marginTop     = "0px";
         rows.style.pointerEvents = "none";
+        header.classList.add("header-collapsed");
         if (bar) bar.style.display = "flex";
       } else {
-        header.classList.remove("header-collapsed");
-        rows.style.maxHeight    = "400px";
-        rows.style.opacity      = "1";
-        rows.style.marginTop    = "16px";
+        rows.style.maxHeight     = "400px";
+        rows.style.opacity       = "1";
+        rows.style.marginTop     = "16px";
         rows.style.pointerEvents = "";
+        header.classList.remove("header-collapsed");
         if (bar) bar.style.display = "none";
       }
     };
 
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = null;
-        const y = window.scrollY;
-        const delta = y - lastY;
-        lastY = y;
-        if (y < 80)      { apply(false); return; }
-        if (delta >  6)    apply(true);
-        if (delta < -4)    apply(false);
-      });
-    };
+    // IntersectionObserver fires only on threshold cross — zero jank
+    const sentinel = document.createElement("div");
+    sentinel.style.cssText = "position:absolute;top:80px;height:1px;width:1px;pointer-events:none;left:0;";
+    document.body.prepend(sentinel);
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
+    const obs = new IntersectionObserver(
+      ([entry]) => apply(!entry.isIntersecting),
+      { threshold: 0 }
+    );
+    obs.observe(sentinel);
+
+    return () => { obs.disconnect(); sentinel.remove(); };
   }, []);
 }
 
@@ -335,7 +328,12 @@ export default function JobDiscoveryFinal() {
           <div
             ref={filterRowsRef}
             className="filter-rows-wrapper"
-            style={{maxHeight:"400px",opacity:1,marginTop:"16px",transition:"max-height 0.36s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease, margin-top 0.32s ease"}}
+            style={{
+              marginTop:"16px",
+              transformOrigin:"top center",
+              transition:"transform 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.26s ease",
+              willChange:"transform, opacity"
+            }}
           >
 
             {/* Row B: preset chips */}
@@ -385,7 +383,7 @@ export default function JobDiscoveryFinal() {
 
           {/* ── Collapsed filter summary bar — shown/hidden by scroll hook ── */}
           {activeCount > 0 && (
-            <div ref={collapsedBarRef} className="collapsed-filter-bar" style={{display:"none"}}>
+            <div ref={collapsedBarRef} className="collapsed-filter-bar" style={{opacity:0,pointerEvents:"none",transition:"opacity 0.22s ease"}}>
               <span className="collapsed-filter-label">Lọc:</span>
               {filters.preset !== "All" && <span className="collapsed-chip">{filters.preset}</span>}
               {filters.areas.map(a => <span key={a} className="collapsed-chip">{a}</span>)}
@@ -499,10 +497,11 @@ const CSS = `
     box-shadow: 0 4px 24px rgba(40,32,15,0.13);
   }
 
-  /* Filter rows — transitions driven by inline style changes in the hook */
+  /* Filter rows — GPU-only collapse via transform+opacity, never max-height */
   .filter-rows-wrapper {
     overflow: hidden;
-    /* transitions are set as inline style — no CSS conflict */
+    /* height is set once via JS offsetHeight measurement */
+    /* transition is set as inline style to avoid cascade conflicts */
   }
 
   /* Row B spacing */
