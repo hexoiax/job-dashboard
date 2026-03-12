@@ -4,27 +4,27 @@ import React, { useState, useEffect, useMemo } from 'react';
 export default function JobDashboard() {
   const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [hoveredJob, setHoveredJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filterLoc, setFilterLoc] = useState('All');
   const [filterPlat, setFilterPlat] = useState('All');
 
-  // Fetch dữ liệu
   const fetchData = async () => {
     try {
+      // Gọi trực tiếp đến API Stein của bạn
       const res = await fetch('https://api.steinhq.com/v1/storages/69b224fbaffba40a625db5bd/Jobs');
       const data = await res.json();
       setJobs(Array.isArray(data) ? data.reverse() : []);
       setLoading(false);
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("API Error:", e); setLoading(false); }
   };
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60000); // Auto-refresh 60s
+    const interval = setInterval(fetchData, 60000);
     return () => clearInterval(interval);
   }, []);
 
-  // Logic Lọc tức thì (Instant Filter)
   const filteredJobs = useMemo(() => {
     return jobs.filter(j => {
       const matchLoc = filterLoc === 'All' || (j.Location && j.Location.includes(filterLoc));
@@ -33,134 +33,135 @@ export default function JobDashboard() {
     });
   }, [jobs, filterLoc, filterPlat]);
 
-  if (loading) return <div className="p-20 text-center font-mono animate-pulse">SYSTEM BOOTING...</div>;
+  if (loading) return <div className="p-20 text-center font-mono text-black animate-pulse uppercase tracking-widest">Initialising Terminal...</div>;
 
   return (
-    <div className="min-h-screen text-[#1A1A1A] font-sans selection:bg-yellow-200">
+    <div className="min-h-screen bg-[#F0F0F0] text-black font-sans p-4 md:p-8">
       
-      {/* 5. HEADER & 16. STATS */}
-      <header className="max-w-5xl mx-auto px-4 pt-12 pb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black/5">
+      {/* HEADER & STATS */}
+      <header className="max-w-[1600px] mx-auto mb-8 flex justify-between items-end border-b-2 border-black pb-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tighter uppercase">Ecommerce Job Dashboard</h1>
-          <div className="flex gap-4 mt-2 text-[11px] font-mono text-slate-400 uppercase">
-            <span>● {jobs.length} Total Jobs</span>
-            <span className="text-green-600">● Updated 1 min ago</span>
-          </div>
+          <h1 className="text-3xl font-black italic tracking-tighter uppercase leading-none">Ecommerce Job Grid</h1>
+          <p className="text-[10px] font-mono mt-2 uppercase font-bold text-slate-500">
+            Total Listing: {jobs.length} — Online: {filteredJobs.length} — Updated: 2026-03-12
+          </p>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-[1600px] mx-auto">
         
-        {/* 6. FILTER BAR (Quan trọng nhất) */}
-        <div className="flex flex-wrap gap-3 mb-12">
-          <select 
-            onChange={(e) => setFilterLoc(e.target.value)}
-            className="appearance-none bg-white border-2 border-black px-4 py-2 text-xs font-bold rounded-none hover:bg-black hover:text-white transition-all cursor-pointer outline-none"
-          >
-            <option value="All uppercase">Location: All</option>
-            <option value="Đà Nẵng">Đà Nẵng</option>
-            <option value="Huế">Huế</option>
-            <option value="Remote">Remote</option>
-          </select>
-
-          <select 
-            onChange={(e) => setFilterPlat(e.target.value)}
-            className="appearance-none bg-white border-2 border-black px-4 py-2 text-xs font-bold rounded-none hover:bg-black hover:text-white transition-all cursor-pointer outline-none"
-          >
-            <option value="All">Platform: All</option>
-            <option value="Amazon">Amazon/Etsy</option>
-            <option value="POD">POD</option>
-            <option value="Shopee">Shopee/TikTok</option>
-          </select>
+        {/* QUICK-CLICK FILTER BAR */}
+        <div className="space-y-4 mb-10">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-[10px] font-black uppercase w-20">Location:</span>
+            {['All', 'Đà Nẵng', 'Huế', 'Remote'].map(loc => (
+              <button 
+                key={loc}
+                onClick={() => setFilterLoc(loc)}
+                className={`px-4 py-1.5 text-[11px] font-bold border-2 transition-all ${filterLoc === loc ? 'bg-black text-white border-black' : 'bg-white border-black hover:bg-yellow-300'}`}
+              >
+                {loc.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-[10px] font-black uppercase w-20">Platform:</span>
+            {['All', 'Amazon', 'POD', 'TikTok'].map(plat => (
+              <button 
+                key={plat}
+                onClick={() => setFilterPlat(plat)}
+                className={`px-4 py-1.5 text-[11px] font-bold border-2 transition-all ${filterPlat === plat ? 'bg-black text-white border-black' : 'bg-white border-black hover:bg-blue-400'}`}
+              >
+                {plat.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* 7. JOB LIST LAYOUT */}
-        <div className="grid gap-3">
+        {/* JOB GRID 4X6 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {filteredJobs.map((job, i) => (
             <div 
               key={i}
+              onMouseEnter={() => setHoveredJob(job)}
+              onMouseLeave={() => setHoveredJob(null)}
               onClick={() => setSelectedJob(job)}
-              className="group bg-white border border-slate-200 p-5 flex flex-col md:flex-row justify-between md:items-center hover:border-black hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative"
+              className="relative aspect-[3/4] bg-white border-2 border-black p-4 flex flex-col justify-between hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all cursor-crosshair group"
             >
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <h3 className="font-bold text-lg uppercase tracking-tight group-hover:underline">{job.Position}</h3>
-                  {/* 17. NEW BADGE */}
-                  <span className="text-[9px] bg-yellow-400 text-black px-1.5 py-0.5 font-black uppercase">New</span>
+              <div>
+                <div className="text-[9px] font-mono mb-2 text-slate-400 uppercase tracking-tighter line-clamp-1 border-b pb-1">
+                  {job.CompanyName}
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 font-medium uppercase tracking-wider">
-                  <span>{job.CompanyName}</span>
-                  <span>📍 {job.Location}</span>
-                  <span className="text-black font-bold tracking-tighter italic">💰 {job.LươngMin} - {job.LươngMax}</span>
+                <h3 className="text-sm font-black leading-tight uppercase group-hover:text-blue-600 line-clamp-3">
+                  {job.Position}
+                </h3>
+              </div>
+              
+              <div className="mt-auto">
+                <div className="text-[10px] font-black italic mb-1">{job.LươngMin}</div>
+                <div className="flex justify-between items-center">
+                   <span className="text-[8px] bg-slate-100 px-1 font-bold">{job.Platform}</span>
+                   <span className="text-[10px] font-black">→</span>
                 </div>
               </div>
-              <div className="mt-4 md:mt-0 text-right">
-                <div className="text-[10px] font-mono text-slate-300 group-hover:text-black uppercase mb-1">{job.Platform}</div>
-                <div className="text-[10px] font-bold py-1 px-3 border border-slate-200 group-hover:border-black inline-block">SCAN JOB →</div>
-              </div>
+
+              {/* HOVER DATA OVERLAY */}
+              {hoveredJob === job && (
+                <div className="absolute inset-0 bg-black text-white p-4 z-10 flex flex-col justify-center animate-in fade-in duration-200">
+                  <p className="text-[10px] font-mono leading-tight italic">
+                    {job.NộiDungGốc?.substring(0, 150)}...
+                  </p>
+                  <p className="mt-4 text-[9px] font-black underline italic">CLICK TO FULL DETAILS</p>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </main>
 
-      {/* 8. JOB DETAIL PANEL (SIDE PANEL) */}
+      {/* SIDE PANEL (Click to View) */}
       {selectedJob && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex justify-end transition-all">
-          <div className="w-full max-w-2xl bg-white h-full shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-300 border-l-4 border-black">
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-end">
+          <div className="w-full max-w-xl bg-white h-full p-8 md:p-12 overflow-y-auto relative border-l-8 border-yellow-400">
+            <button 
+              onClick={() => setSelectedJob(null)}
+              className="mb-8 text-xs font-black border-2 border-black px-4 py-2 hover:bg-red-500 hover:text-white transition-all uppercase"
+            >
+              [ESC] Close Panel
+            </button>
             
-            <div className="sticky top-0 bg-white border-b border-slate-100 p-6 flex justify-between items-center">
-              <button 
-                onClick={() => setSelectedJob(null)}
-                className="text-[10px] font-black border-2 border-black px-4 py-2 hover:bg-black hover:text-white transition-all"
-              >
-                ← BACK TO DASHBOARD
-              </button>
-              <div className="text-[10px] font-mono text-slate-400 uppercase">JobID: {selectedJob.IDBàiviết}</div>
-            </div>
-
-            <div className="p-8 md:p-12">
-              <header className="mb-12">
-                <p className="text-xs font-mono text-blue-600 font-bold uppercase mb-2">{selectedJob.CompanyName} // {selectedJob.Platform}</p>
-                <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-[0.9] mb-8">{selectedJob.Position}</h2>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-4">
-                    <p className="text-[10px] font-mono text-slate-400 uppercase mb-1">Salary Budget</p>
-                    <p className="text-sm font-bold tracking-tighter italic">{selectedJob.LươngMin} - {selectedJob.LươngMax}</p>
-                  </div>
-                  <div className="bg-slate-50 p-4">
-                    <p className="text-[10px] font-mono text-slate-400 uppercase mb-1">Work Location</p>
-                    <p className="text-sm font-bold tracking-tighter italic">{selectedJob.Location}</p>
-                  </div>
-                </div>
-              </header>
-
-              <article className="prose max-w-none">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] border-b-2 border-black pb-2 mb-6 text-slate-400">Full Description</h4>
-                <div className="whitespace-pre-line text-sm md:text-base text-slate-700 font-medium leading-relaxed">
-                  {selectedJob.NộiDungGốc}
-                </div>
-              </article>
-              
-              <div className="mt-12 sticky bottom-0 bg-gradient-to-t from-white pt-10 pb-4">
-                <a 
-                  href={selectedJob.LINKBÀIVIẾT}
-                  target="_blank"
-                  className="block w-full bg-black text-white text-center py-6 font-black text-lg uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-xl"
-                >
-                  Apply Directly
-                </a>
-                <p className="text-center text-[9px] font-mono text-slate-400 mt-4 italic">No registration required. Link opens recruiter's original post.</p>
+            <p className="text-xs font-mono text-blue-600 font-bold mb-2">{selectedJob.CompanyName} // {selectedJob.Location}</p>
+            <h2 className="text-4xl font-black uppercase leading-[0.85] tracking-tighter mb-8">{selectedJob.Position}</h2>
+            
+            <div className="grid grid-cols-2 border-2 border-black mb-8">
+              <div className="p-4 border-r-2 border-black">
+                <p className="text-[9px] font-black uppercase mb-1">Budget</p>
+                <p className="font-bold text-sm italic">{selectedJob.LươngMin} - {selectedJob.LươngMax}</p>
+              </div>
+              <div className="p-4">
+                <p className="text-[9px] font-black uppercase mb-1">Platform</p>
+                <p className="font-bold text-sm italic">{selectedJob.Platform}</p>
               </div>
             </div>
+
+            <div className="prose">
+              <h4 className="text-[10px] font-black uppercase border-b-2 border-black pb-1 mb-4">Description</h4>
+              <p className="whitespace-pre-line text-sm text-slate-700 leading-relaxed">
+                {selectedJob.NộiDungGốc}
+              </p>
+            </div>
+            
+            <a 
+              href={selectedJob.LINKBÀIVIẾT} 
+              target="_blank"
+              className="mt-12 block w-full bg-black text-white text-center py-6 font-black text-xl uppercase tracking-widest hover:bg-yellow-400 hover:text-black transition-all"
+            >
+              Apply Now
+            </a>
           </div>
-          <div className="flex-1 hidden md:block" onClick={() => setSelectedJob(null)}></div>
+          <div className="flex-1" onClick={() => setSelectedJob(null)}></div>
         </div>
       )}
-
-      <footer className="max-w-5xl mx-auto px-4 py-20 text-center border-t border-slate-100">
-        <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">Built with Zero-Friction Logic • Ecommerce Job Dashboard 2026</p>
-      </footer>
     </div>
   );
 }
