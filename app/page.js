@@ -216,7 +216,7 @@ export default function JobDiscoveryFinal() {
             {/* Brand */}
             <div style={{flexShrink:0,paddingRight:isMobile?0:20,borderRight:isMobile?"none":"1.5px solid var(--border)"}}>
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:isMobile?26:32,fontWeight:700,letterSpacing:"-0.01em",color:"var(--ink)",lineHeight:1}}>
-                Job<span style={{color:"var(--acc)"}}>Radar</span>
+                DA NANG<span style={{color:"var(--acc)"}}>Ecom</span>
               </div>
               <div style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",letterSpacing:"0.16em",textTransform:"uppercase",marginTop:3}}>
                 {jobs.length} jobs · <span style={{color:"var(--green)"}}>{todayN} mới hôm nay</span>
