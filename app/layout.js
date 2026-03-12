@@ -1,4 +1,6 @@
-import "./globals.css";
+export const metadata = {
+  title: "Ecommerce Job Dashboard",
+};
 
 export default function RootLayout({ children }) {
   return (
@@ -6,7 +8,7 @@ export default function RootLayout({ children }) {
       <head>
         <script src="https://cdn.tailwindcss.com"></script>
       </head>
-      <body>{children}</body>
+      <body className="bg-[#F8F9FA] antialiased">{children}</body>
     </html>
   );
 }
