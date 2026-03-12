@@ -39,36 +39,57 @@ function useIsMobile(bp = 768) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// HOOK — scroll direction & position
+// HOOK — scroll: manipulates DOM directly, zero React re-renders
 // ─────────────────────────────────────────────────────────────
-function useScrollBehavior() {
-  const [scrollY, setScrollY] = useState(0);
-  const [collapsed, setCollapsed] = useState(false);
-  const lastY = useRef(0);
-  const ticking = useRef(false);
-
+function useScrollDOM(headerRef, filterRowsRef, collapsedBarRef) {
   useEffect(() => {
-    const onScroll = () => {
-      if (!ticking.current) {
-        requestAnimationFrame(() => {
-          const y = window.scrollY;
-          const delta = y - lastY.current;
-          // Collapse when scrolling DOWN past 80px
-          if (delta > 4 && y > 80) setCollapsed(true);
-          // Expand when scrolling UP or near top
-          if (delta < -6 || y < 60) setCollapsed(false);
-          lastY.current = y;
-          setScrollY(y);
-          ticking.current = false;
-        });
-        ticking.current = true;
+    let lastY = window.scrollY;
+    let isCollapsed = false;
+    let raf = null;
+
+    const apply = (collapse) => {
+      if (collapse === isCollapsed) return;
+      isCollapsed = collapse;
+      const header = headerRef.current;
+      const rows   = filterRowsRef.current;
+      const bar    = collapsedBarRef.current;
+      if (!header || !rows) return;
+      if (collapse) {
+        header.classList.add("header-collapsed");
+        rows.style.maxHeight    = "0px";
+        rows.style.opacity      = "0";
+        rows.style.marginTop    = "0";
+        rows.style.pointerEvents = "none";
+        if (bar) bar.style.display = "flex";
+      } else {
+        header.classList.remove("header-collapsed");
+        rows.style.maxHeight    = "400px";
+        rows.style.opacity      = "1";
+        rows.style.marginTop    = "16px";
+        rows.style.pointerEvents = "";
+        if (bar) bar.style.display = "none";
       }
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
-  return { scrollY, collapsed };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = null;
+        const y = window.scrollY;
+        const delta = y - lastY;
+        lastY = y;
+        if (y < 80)      { apply(false); return; }
+        if (delta >  6)    apply(true);
+        if (delta < -4)    apply(false);
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -146,7 +167,6 @@ function deriveOptions(jobs) {
 // ─────────────────────────────────────────────────────────────
 export default function JobDiscoveryFinal() {
   const isMobile = useIsMobile();
-  const { scrollY, collapsed } = useScrollBehavior();
   const [jobs, setJobs]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -155,17 +175,27 @@ export default function JobDiscoveryFinal() {
   const [opts, setOpts]       = useState({ areas:[], districts:[], levels:[] });
   const [filters, setFilters] = useState({ preset:"All", areas:[], districts:[], levels:[] });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const headerRef = useRef(null);
+  const headerRef      = useRef(null);
+  const filterRowsRef  = useRef(null);
+  const collapsedBarRef = useRef(null);
 
-  // Measure header height for main padding
+  // DOM-direct scroll — zero React re-renders
+  useScrollDOM(headerRef, filterRowsRef, collapsedBarRef);
+
+  // Scroll progress bar — pure DOM, no re-render
   useEffect(() => {
-    if (!headerRef.current) return;
-    const obs = new ResizeObserver(entries => {
-      setHeaderHeight(entries[0].contentRect.height);
-    });
-    obs.observe(headerRef.current);
-    return () => obs.disconnect();
+    let raf = null;
+    const bar = document.getElementById("scroll-progress-bar");
+    const update = () => {
+      raf = null;
+      if (!bar) return;
+      const docH = document.documentElement.scrollHeight - window.innerHeight;
+      const pct  = docH > 0 ? Math.min(100, (window.scrollY / docH) * 100) : 0;
+      bar.style.width = pct + "%";
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); if (raf) cancelAnimationFrame(raf); };
   }, []);
 
   // Lock body scroll when panel/drawer open on mobile
@@ -237,13 +267,6 @@ export default function JobDiscoveryFinal() {
   const verN   = jobs.filter(j => j.isVerified).length;
   const emailN = jobs.filter(j => j["Email"] && j["Email"] !== "Không rõ").length;
 
-  // Scroll progress
-  const scrollProgress = useMemo(() => {
-    if (typeof document === "undefined") return 0;
-    const docH = document.documentElement.scrollHeight - window.innerHeight;
-    return docH > 0 ? Math.min(100, (scrollY / docH) * 100) : 0;
-  }, [scrollY]);
-
   if (loading) return (
     <div style={{background:"#F4EFE8",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
@@ -262,11 +285,11 @@ export default function JobDiscoveryFinal() {
       {/* ══════════════════ HEADER ══════════════════ */}
       <header
         ref={headerRef}
-        className={`site-header${collapsed ? " header-collapsed" : ""}`}
+        className="site-header"
         style={{position:"sticky",top:0,zIndex:100}}
       >
-        {/* Scroll progress bar */}
-        <div className="scroll-progress" style={{"--progress": `${scrollProgress}%`}} />
+        {/* Scroll progress bar — updated by separate effect */}
+        <div className="scroll-progress" id="scroll-progress-bar" />
 
         <div style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"14px":"20px"} ${P}`}}>
 
@@ -309,7 +332,11 @@ export default function JobDiscoveryFinal() {
           </div>
 
           {/* ── Collapsible filter rows ── */}
-          <div className="filter-rows-wrapper">
+          <div
+            ref={filterRowsRef}
+            className="filter-rows-wrapper"
+            style={{maxHeight:"400px",opacity:1,marginTop:"16px",transition:"max-height 0.36s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease, margin-top 0.32s ease"}}
+          >
 
             {/* Row B: preset chips */}
             <div className="header-row-b" style={{display:"flex",gap:8,overflowX:"auto",scrollbarWidth:"none",paddingBottom:isMobile?4:0,flexWrap:isMobile?"nowrap":"wrap"}}>
@@ -356,10 +383,10 @@ export default function JobDiscoveryFinal() {
             )}
           </div>
 
-          {/* ── Collapsed bar: active filters summary ── */}
-          {collapsed && activeCount > 0 && (
-            <div className="collapsed-filter-bar">
-              <span className="collapsed-filter-label">Đang lọc:</span>
+          {/* ── Collapsed filter summary bar — shown/hidden by scroll hook ── */}
+          {activeCount > 0 && (
+            <div ref={collapsedBarRef} className="collapsed-filter-bar" style={{display:"none"}}>
+              <span className="collapsed-filter-label">Lọc:</span>
               {filters.preset !== "All" && <span className="collapsed-chip">{filters.preset}</span>}
               {filters.areas.map(a => <span key={a} className="collapsed-chip">{a}</span>)}
               {filters.districts.map(d => <span key={d} className="collapsed-chip">{d}</span>)}
@@ -465,139 +492,48 @@ const CSS = `
     box-shadow: 0 2px 16px rgba(40,32,15,0.06);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    transition:
-      box-shadow var(--header-transition),
-      background var(--header-transition);
-    will-change: transform;
+    will-change: box-shadow;
+    transition: box-shadow 0.3s ease, background 0.3s ease;
   }
   .site-header.header-collapsed {
-    box-shadow: 0 4px 24px rgba(40,32,15,0.12);
-    background: rgba(255,255,255,0.99);
+    box-shadow: 0 4px 24px rgba(40,32,15,0.13);
   }
 
-  /* Filter rows — height-animated collapse */
+  /* Filter rows — transitions driven by inline style changes in the hook */
   .filter-rows-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
     overflow: hidden;
-    /* max-height animates open → closed */
-    max-height: 300px;
-    opacity: 1;
-    transition:
-      max-height var(--header-transition),
-      opacity 0.28s ease,
-      margin-top 0.3s ease;
-    margin-top: 16px;
-  }
-  .header-collapsed .filter-rows-wrapper {
-    max-height: 0;
-    opacity: 0;
-    margin-top: 0;
-    pointer-events: none;
+    /* transitions are set as inline style — no CSS conflict */
   }
 
   /* Row B spacing */
-  .header-row-b {
-    padding-bottom: 16px;
-  }
-  @media(max-width:767px) {
-    .header-row-b { padding-bottom: 4px; }
-  }
+  .header-row-b { padding-bottom: 16px; }
+  @media(max-width:767px) { .header-row-b { padding-bottom: 4px; } }
 
   /* Row C spacing */
-  .header-row-c {
-    border-top: 1px solid var(--border);
-    padding-top: 16px;
-  }
-
-  /* Row A — slight compress on collapse */
-  .header-row-a {
-    transition: margin-bottom var(--header-transition);
-    margin-bottom: 0;
-  }
-  /* Hide stats column on collapse */
-  .header-collapsed .stat-item {
-    animation: statFade 0.2s ease forwards;
-  }
-  @keyframes statFade {
-    to { opacity: 0; transform: translateY(-4px); }
-  }
-
-  /* ── Collapsed filter summary bar ── */
-  .collapsed-filter-bar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding: 8px 0 4px;
-    border-top: 1px solid var(--border);
-    margin-top: 10px;
-    animation: barSlideIn 0.28s cubic-bezier(0.16,1,0.3,1);
-  }
-  @keyframes barSlideIn {
-    from { opacity:0; transform:translateY(-6px); }
-    to   { opacity:1; transform:translateY(0); }
-  }
-  .collapsed-filter-label {
-    font-family: Inconsolata, monospace;
-    font-size: 11px;
-    color: var(--ink3);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .collapsed-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 3px 10px;
-    font-size: 11px;
-    font-weight: 700;
-    font-family: Inconsolata, monospace;
-    background: var(--ink);
-    color: var(--bg);
-    border-radius: 20px;
-    white-space: nowrap;
-    flex-shrink: 0;
-    letter-spacing: 0.04em;
-  }
-  .collapsed-count {
-    font-family: Inconsolata, monospace;
-    font-size: 11px;
-    color: var(--green);
-    font-weight: 700;
-    margin-left: auto;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .collapsed-reset {
-    flex-shrink: 0;
-    padding: 3px 8px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--red);
-    background: #FEF0F0;
-    border: 1px solid #F5AAAA;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'Jost', sans-serif;
-  }
+  .header-row-c { border-top: 1px solid var(--border); padding-top: 16px; }
 
   /* ── Scroll progress bar ── */
   .scroll-progress {
     position: absolute;
     top: 0; left: 0;
     height: 2px;
-    width: var(--progress, 0%);
+    width: 0%;
     background: linear-gradient(90deg, var(--acc), #E09060);
-    transition: width 0.1s linear;
+    transition: width 0.08s linear;
     z-index: 10;
+    will-change: width;
   }
+  /* ── Collapsed filter summary bar ── */
+  .collapsed-filter-bar {
+    align-items: center; gap: 6px; flex-wrap: nowrap;
+    overflow-x: auto; scrollbar-width: none;
+    padding: 8px 0 4px; border-top: 1px solid var(--border); margin-top: 10px;
+  }
+  .collapsed-filter-label { font-family:Inconsolata,monospace; font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:0.1em; white-space:nowrap; flex-shrink:0; }
+  .collapsed-chip { display:inline-flex; align-items:center; padding:3px 10px; font-size:11px; font-weight:700; font-family:Inconsolata,monospace; background:var(--ink); color:var(--bg); border-radius:20px; white-space:nowrap; flex-shrink:0; letter-spacing:0.04em; }
+  .collapsed-count { font-family:Inconsolata,monospace; font-size:11px; color:var(--green); font-weight:700; margin-left:auto; white-space:nowrap; flex-shrink:0; }
+  .collapsed-reset { flex-shrink:0; padding:3px 8px; font-size:11px; font-weight:700; color:var(--red); background:#FEF0F0; border:1px solid #F5AAAA; border-radius:4px; cursor:pointer; font-family:'Jost',sans-serif; }
 
-  /* ── Search clear button ── */
   .search-clear {
     position: absolute;
     right: 14px;
