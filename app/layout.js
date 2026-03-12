@@ -1,14 +1,11 @@
 import "./globals.css";
 
-export const metadata = {
-  title: "Ecommerce Job Dashboard",
-  description: "Quick job finder for POD & Amazon Sellers",
-};
-
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <script src="https://cdn.tailwindcss.com"></script>
+    <html lang="vi">
+      <head>
+        <script src="https://cdn.tailwindcss.com"></script>
+      </head>
       <body>{children}</body>
     </html>
   );
