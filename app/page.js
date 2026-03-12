@@ -175,6 +175,19 @@ export default function JobDiscoveryFinal() {
   // DOM-direct scroll — zero React re-renders
   useScrollDOM(headerRef, filterRowsRef, collapsedBarRef);
 
+  // Keep CSS var --header-h in sync so main never hides under fixed header
+  useEffect(() => {
+    const el = document.getElementById("site-header-el");
+    if (!el) return;
+    const update = () => {
+      document.documentElement.style.setProperty("--header-h", el.offsetHeight + "px");
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Scroll progress bar — pure DOM, no re-render
   useEffect(() => {
     let raf = null;
@@ -279,7 +292,7 @@ export default function JobDiscoveryFinal() {
       <header
         ref={headerRef}
         className="site-header"
-        style={{position:"sticky",top:0,zIndex:100}}
+        id="site-header-el" style={{position:"fixed",top:0,left:0,right:0,zIndex:100}}
       >
         {/* Scroll progress bar — updated by separate effect */}
         <div className="scroll-progress" id="scroll-progress-bar" />
@@ -398,7 +411,7 @@ export default function JobDiscoveryFinal() {
       </header>
 
       {/* ══════════════════ MAIN ══════════════════ */}
-      <main style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`}}>
+      <main id="site-main" style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`,paddingTop:"var(--header-h,80px)"}}>
 
         {/* Mobile: active filter summary bar */}
         {isMobile && isFiltering && (
@@ -487,11 +500,9 @@ const CSS = `
   .site-header {
     background: rgba(255,255,255,0.97);
     border-bottom: 1.5px solid var(--border);
-    box-shadow: 0 2px 16px rgba(40,32,15,0.06);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    will-change: box-shadow;
-    transition: box-shadow 0.3s ease, background 0.3s ease;
+    box-shadow: 0 2px 20px rgba(40,32,15,0.08);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
   }
   .site-header.header-collapsed {
     box-shadow: 0 4px 24px rgba(40,32,15,0.13);
