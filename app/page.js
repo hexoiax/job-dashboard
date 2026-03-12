@@ -190,9 +190,9 @@ export default function JobDiscoveryV4() {
         ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
         /* PRESET CHIPS */
         .preset-chip {
-          display:inline-flex; align-items:center; gap:6px;
-          padding:10px 18px; font-size:13px; font-weight:600;
-          letter-spacing:0.04em; border:1.5px solid var(--border);
+          display:inline-flex; align-items:center; gap:7px;
+          padding:12px 22px; font-size:15px; font-weight:600;
+          letter-spacing:0.03em; border:1.5px solid var(--border);
           background:white; color:var(--ink2); cursor:pointer;
           transition:all 0.15s; white-space:nowrap; border-radius:4px;
           font-family:'Jost',sans-serif;
@@ -202,7 +202,7 @@ export default function JobDiscoveryV4() {
         /* FILTER PILLS */
         .fpill {
           display:inline-flex; align-items:center;
-          padding:8px 16px; font-size:13px; font-weight:600;
+          padding:9px 18px; font-size:14px; font-weight:600;
           border:1.5px solid var(--border); background:white;
           color:var(--ink2); cursor:pointer; border-radius:40px;
           transition:all 0.15s; white-space:nowrap; font-family:'Jost',sans-serif;
@@ -220,14 +220,31 @@ export default function JobDiscoveryV4() {
         /* CARD GRID — equal heights */
         .card-grid {
           display:grid;
-          grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+          grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
           gap:20px;
           align-items:stretch;
         }
         .card-grid > * { height:100%; }
-        /* SCROLL ROW */
-        .srow { display:flex; gap:20px; overflow-x:auto; padding-bottom:10px; scrollbar-width:thin; }
-        .srow > * { flex-shrink:0; width:300px; }
+        /* CAROUSEL — no scrollbar at all */
+        .srow-wrap { position:relative; padding:0 0 8px; }
+        .srow {
+          display:grid;
+          grid-template-columns:repeat(var(--cols,3),1fr);
+          gap:20px;
+          align-items:stretch;
+        }
+        /* NAV BUTTONS — below section, aligned right */
+        .shelf-nav { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+        .nav-btn {
+          width:42px; height:42px; border-radius:50%;
+          background:white; border:1.5px solid var(--border);
+          box-shadow:0 2px 10px rgba(40,32,15,0.1);
+          cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;
+          transition:all 0.15s; color:var(--ink); flex-shrink:0;
+        }
+        .nav-btn:hover { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+        .nav-btn:disabled { opacity:0.3; cursor:default; }
+        .nav-btn:disabled:hover { background:white; color:var(--ink); border-color:var(--border); }
         /* PANEL */
         .overlay { position:fixed;inset:0;background:rgba(40,32,15,0.55);z-index:200;display:flex;justify-content:flex-end; backdrop-filter:blur(2px); }
         .panel { background:var(--bg); height:100%; overflow-y:auto; display:flex; flex-direction:column; animation:slideIn 0.32s cubic-bezier(0.16,1,0.3,1); }
@@ -235,21 +252,21 @@ export default function JobDiscoveryV4() {
         @keyframes spin { to{transform:rotate(360deg)} }
         /* INPUT */
         .sinput {
-          width:100%; padding:13px 18px; border:1.5px solid var(--border);
-          background:white; font-size:15px; font-family:'Jost',sans-serif;
+          width:100%; padding:14px 20px; border:1.5px solid var(--border);
+          background:white; font-size:16px; font-family:'Jost',sans-serif;
           color:var(--ink); outline:none; border-radius:6px; transition:border 0.15s;
         }
         .sinput:focus { border-color:var(--acc); box-shadow:0 0 0 3px rgba(184,98,26,0.08); }
         .sinput::placeholder { color:var(--ink3); }
         /* RANGE */
         input[type=range] { -webkit-appearance:none; width:100%; height:4px; background:var(--bg3); outline:none; cursor:pointer; border-radius:2px; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; background:var(--ink); border-radius:50%; cursor:pointer; border:2px solid white; box-shadow:0 1px 4px rgba(0,0,0,0.2); }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; background:var(--ink); border-radius:50%; cursor:pointer; border:2px solid white; box-shadow:0 1px 4px rgba(0,0,0,0.2); }
         /* SECTION ACCENT LINE */
         .sec-accent { width:40px; height:3px; background:var(--acc); border-radius:2px; margin-bottom:8px; }
         /* APPLY BTN */
         .apply-btn {
-          display:block; width:100%; padding:18px; background:var(--ink);
-          color:var(--bg); font-weight:700; font-size:14px; letter-spacing:0.12em;
+          display:block; width:100%; padding:20px; background:var(--ink);
+          color:var(--bg); font-weight:700; font-size:16px; letter-spacing:0.12em;
           text-transform:uppercase; text-align:center; text-decoration:none;
           transition:all 0.2s; border:none; cursor:pointer; border-radius:4px;
           font-family:'Jost',sans-serif;
@@ -267,10 +284,10 @@ export default function JobDiscoveryV4() {
           <div style={{display:"flex",alignItems:"center",gap:20,marginBottom:20,flexWrap:"wrap"}}>
             {/* Brand */}
             <div style={{flexShrink:0,paddingRight:20,borderRight:"1.5px solid var(--border)"}}>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,letterSpacing:"-0.01em",color:"var(--ink)",lineHeight:1}}>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:32,fontWeight:700,letterSpacing:"-0.01em",color:"var(--ink)",lineHeight:1}}>
                 Job<span style={{color:"var(--acc)"}}>Radar</span>
               </div>
-              <div style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",letterSpacing:"0.2em",textTransform:"uppercase",marginTop:3}}>
+              <div style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",letterSpacing:"0.2em",textTransform:"uppercase",marginTop:3}}>
                 {jobs.length} jobs · <span style={{color:"var(--green)"}}>{todayN} mới hôm nay</span>
               </div>
             </div>
@@ -286,20 +303,20 @@ export default function JobDiscoveryV4() {
             {/* Quick Stats */}
             <div style={{display:"flex",gap:24,flexShrink:0,paddingLeft:20,borderLeft:"1.5px solid var(--border)"}}>
               <div className="stat">
-                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700,color:"var(--ink)"}}>{jobs.length}</span>
-                <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Active</span>
+                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:"var(--ink)"}}>{jobs.length}</span>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Active</span>
               </div>
               <div className="stat">
-                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700,color:"var(--green)"}}>{todayN}</span>
-                <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Hôm nay</span>
+                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:"var(--green)"}}>{todayN}</span>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Hôm nay</span>
               </div>
               <div className="stat">
-                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700,color:"var(--acc)"}}>{verN}</span>
-                <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Verified</span>
+                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:"var(--acc)"}}>{verN}</span>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Verified</span>
               </div>
               <div className="stat">
-                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700,color:"var(--ink)"}}>{emailN}</span>
-                <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Có Email</span>
+                <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:"var(--ink)"}}>{emailN}</span>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.12em"}}>Có Email</span>
               </div>
             </div>
           </div>
@@ -426,8 +443,8 @@ export default function JobDiscoveryV4() {
 
 function FilterBlock({ label, children }) {
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.18em",color:"var(--ink3)"}}>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <span style={{fontFamily:"Inconsolata,monospace",fontSize:12,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.18em",color:"var(--ink3)"}}>
         {label}
       </span>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
@@ -441,25 +458,46 @@ function SectionHead({ icon, title, sub }) {
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-        <span style={{fontSize:22}}>{icon}</span>
-        <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,fontWeight:700,color:"var(--ink)"}}>{title}</span>
+        <span style={{fontSize:24}}>{icon}</span>
+        <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,fontWeight:700,color:"var(--ink)"}}>{title}</span>
       </div>
-      {sub && <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",letterSpacing:"0.12em",textTransform:"uppercase",marginLeft:32}}>{sub}</p>}
+      {sub && <p style={{fontFamily:"Inconsolata,monospace",fontSize:12,color:"var(--ink3)",letterSpacing:"0.12em",textTransform:"uppercase",marginLeft:34}}>{sub}</p>}
     </div>
   );
 }
 
 function Shelf({ icon, title, sub, jobs, onSel }) {
+  const [page, setPage] = useState(0);
+  const PER_PAGE = 3;
+  const totalPages = Math.ceil(jobs.length / PER_PAGE);
+  const visible = jobs.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
+
   return (
     <section style={{marginBottom:52}}>
       <SectionHead icon={icon} title={title} sub={sub} />
-      <div className="srow">
-        {jobs.map((j,i)=>(
-          <div key={i} style={{width:300,flexShrink:0}}>
-            <JobCard job={j} onClick={()=>onSel(j)} />
-          </div>
-        ))}
+      <div className="srow-wrap">
+        <div className="srow" style={{"--cols": PER_PAGE}}>
+          {visible.map((j,i) => (
+            <div key={`${page}-${i}`} style={{height:"100%"}}>
+              <JobCard job={j} onClick={()=>onSel(j)} />
+            </div>
+          ))}
+          {/* Fill empty slots so grid doesn't collapse */}
+          {Array.from({length: PER_PAGE - visible.length}).map((_,i) => (
+            <div key={`empty-${i}`} />
+          ))}
+        </div>
       </div>
+      {/* Nav buttons + page indicator */}
+      {totalPages > 1 && (
+        <div className="shelf-nav">
+          <span style={{fontSize:13,color:"var(--ink3)",fontFamily:"Inconsolata,monospace",alignSelf:"center",marginRight:4}}>
+            {page+1} / {totalPages}
+          </span>
+          <button className="nav-btn" disabled={page===0} onClick={()=>setPage(p=>p-1)}>←</button>
+          <button className="nav-btn" disabled={page>=totalPages-1} onClick={()=>setPage(p=>p+1)}>→</button>
+        </div>
+      )}
     </section>
   );
 }
@@ -469,7 +507,7 @@ function Tag({ name }) {
   return (
     <span style={{
       display:"inline-flex",alignItems:"center",
-      padding:"3px 9px",fontSize:10,fontWeight:700,
+      padding:"4px 10px",fontSize:11,fontWeight:700,
       letterSpacing:"0.1em",textTransform:"uppercase",
       borderRadius:3,fontFamily:"Inconsolata,monospace",
       background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,
@@ -491,45 +529,45 @@ function JobCard({ job, onClick }) {
   return (
     <div className="jcard" onClick={onClick} style={{height:"100%"}}>
       {/* Top section: tags + meta */}
-      <div style={{padding:"18px 20px 0"}}>
+      <div style={{padding:"20px 22px 0"}}>
         {/* Tags */}
-        <div style={{display:"flex",gap:5,flexWrap:"wrap",minHeight:22,marginBottom:12}}>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",minHeight:24,marginBottom:14}}>
           {job.tags.slice(0,4).map(t=><Tag key={t} name={t} />)}
         </div>
 
         {/* Company row */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:12,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:"0.05em"}}>
+            <span style={{fontSize:13,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:"0.05em"}}>
               {job["Tên Công Ty"]}
             </span>
             {job.isVerified && (
-              <span style={{fontSize:9,fontWeight:700,background:"var(--acc)",color:"white",padding:"2px 6px",borderRadius:3}}>✓ Verified</span>
+              <span style={{fontSize:10,fontWeight:700,background:"var(--acc)",color:"white",padding:"2px 7px",borderRadius:3}}>✓</span>
             )}
           </div>
-          <span style={{fontSize:11,fontWeight:600,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.08em",background:"var(--bg2)",padding:"2px 8px",borderRadius:20}}>
+          <span style={{fontSize:12,fontWeight:600,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.08em",background:"var(--bg2)",padding:"3px 10px",borderRadius:20}}>
             {job["Level"]}
           </span>
         </div>
 
         {/* Title */}
-        <h3 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,lineHeight:1.2,color:"var(--ink)",marginBottom:14}}>
+        <h3 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:700,lineHeight:1.2,color:"var(--ink)",marginBottom:14}}>
           {job["Vị Trí"]}
         </h3>
 
         {/* Salary */}
         <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:8}}>
-          <span style={{fontFamily:"Inconsolata,monospace",fontSize:22,fontWeight:600,color:"var(--acc)"}}>
+          <span style={{fontFamily:"Inconsolata,monospace",fontSize:24,fontWeight:600,color:"var(--acc)"}}>
             {salLabel}
           </span>
-          {salMax>0 && <span style={{fontSize:10,color:"var(--ink3)"}}>VND</span>}
+          {salMax>0 && <span style={{fontSize:12,color:"var(--ink3)"}}>VND</span>}
         </div>
 
         {/* Location + freshness */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <span style={{fontSize:12,color:"var(--ink2)"}}>📍 {job.district!=="Không rõ"?job.district:job.area}</span>
+          <span style={{fontSize:14,color:"var(--ink2)"}}>📍 {job.district!=="Không rõ"?job.district:job.area}</span>
           {freshLabel && (
-            <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",background:"var(--bg2)",padding:"2px 8px",borderRadius:20}}>
+            <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",background:"var(--bg2)",padding:"3px 9px",borderRadius:20}}>
               {freshLabel}
             </span>
           )}
@@ -539,7 +577,7 @@ function JobCard({ job, onClick }) {
         {job["Kỹ Năng"] && (
           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:16}}>
             {job["Kỹ Năng"].split(",").slice(0,3).map(s=>s.trim()).filter(Boolean).map(s=>(
-              <span key={s} style={{fontSize:10,padding:"3px 9px",border:"1px solid var(--border)",color:"var(--ink3)",borderRadius:20,fontWeight:500}}>
+              <span key={s} style={{fontSize:11,padding:"4px 10px",border:"1px solid var(--border)",color:"var(--ink3)",borderRadius:20,fontWeight:500}}>
                 {s}
               </span>
             ))}
@@ -551,11 +589,11 @@ function JobCard({ job, onClick }) {
       <div style={{flex:1}} />
 
       {/* CTA */}
-      <div style={{padding:"0 20px 20px",marginTop:4}}>
+      <div style={{padding:"0 22px 22px",marginTop:4}}>
         <div style={{borderTop:"1px solid var(--border)",paddingTop:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:11,color:"var(--ink3)",fontFamily:"Inconsolata,monospace"}}>Score {job.finalScore}</span>
-            <span style={{fontSize:12,fontWeight:700,color:"var(--acc)",letterSpacing:"0.06em"}}>Xem chi tiết →</span>
+            <span style={{fontSize:12,color:"var(--ink3)",fontFamily:"Inconsolata,monospace"}}>Score {job.finalScore}</span>
+            <span style={{fontSize:13,fontWeight:700,color:"var(--acc)",letterSpacing:"0.06em"}}>Xem chi tiết →</span>
           </div>
         </div>
       </div>
