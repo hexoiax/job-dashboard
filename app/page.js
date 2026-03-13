@@ -3,10 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 
 // ─────────────────────────────────────────────────────────────
 // NATURE BACKGROUND — 3 layers: clouds · birds · leaves
-// Pure CSS animation, pointer-events:none, GPU-only transforms
 // ─────────────────────────────────────────────────────────────
-
-// Cloud SVG — soft organic blob
 const CloudSVG = ({ w = 90, opacity = 0.18 }) => (
   <svg width={w} height={w * 0.55} viewBox="0 0 120 66" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display:"block"}}>
     <ellipse cx="60" cy="44" rx="52" ry="22" fill={`rgba(200,185,165,${opacity})`}/>
@@ -15,16 +12,12 @@ const CloudSVG = ({ w = 90, opacity = 0.18 }) => (
     <ellipse cx="60" cy="28" rx="20" ry="16" fill={`rgba(200,185,165,${opacity})`}/>
   </svg>
 );
-
-// Bird SVG — simple M-curve wings, single stroke
 const BirdSVG = ({ size = 18, color = "rgba(156,140,120,0.45)" }) => (
   <svg width={size * 2.2} height={size} viewBox="0 0 44 20" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M22 10 Q14 2 4 6" stroke={color} strokeWidth="1.8" strokeLinecap="round" fill="none"/>
     <path d="M22 10 Q30 2 40 6" stroke={color} strokeWidth="1.8" strokeLinecap="round" fill="none"/>
   </svg>
 );
-
-// Leaf SVG — simple teardrop
 const LeafSVG = ({ size = 14, color = "rgba(156,140,120,0.35)" }) => (
   <svg width={size} height={size * 1.4} viewBox="0 0 20 28" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M10 2 Q18 10 10 26 Q2 10 10 2Z" fill={color}/>
@@ -32,7 +25,6 @@ const LeafSVG = ({ size = 14, color = "rgba(156,140,120,0.35)" }) => (
   </svg>
 );
 
-// Cloud configs — vary size, speed, Y position, delay
 const CLOUDS = [
   { id:"c1", w:140, y:"8%",  dur:55, delay:0,   opacity:0.13 },
   { id:"c2", w:90,  y:"4%",  dur:70, delay:-18, opacity:0.10 },
@@ -40,16 +32,12 @@ const CLOUDS = [
   { id:"c4", w:70,  y:"20%", dur:80, delay:-50, opacity:0.08 },
   { id:"c5", w:120, y:"3%",  dur:48, delay:-8,  opacity:0.09 },
 ];
-
-// Bird configs — 3 birds, different Y, speed, size
 const BIRDS = [
   { id:"b1", y:"15%", dur:18, delay:0,   size:16, flip:false },
   { id:"b2", y:"28%", dur:24, delay:-7,  size:12, flip:false },
   { id:"b3", y:"10%", dur:21, delay:-14, size:14, flip:false },
   { id:"b4", y:"22%", dur:30, delay:-20, size:10, flip:true  },
 ];
-
-// Leaf configs — 4 leaves, random X start, drift direction
 const LEAVES = [
   { id:"l1", x:"15%", dur:12, delay:0,   size:13, driftX:40,  rot:200 },
   { id:"l2", x:"45%", dur:16, delay:-5,  size:10, driftX:-30, rot:-240 },
@@ -58,53 +46,22 @@ const LEAVES = [
 ];
 
 const NatureBackground = memo(() => (
-  <div aria-hidden="true" style={{
-    position:"fixed", inset:0, zIndex:0,
-    pointerEvents:"none", overflow:"hidden",
-  }}>
+  <div aria-hidden="true" style={{position:"fixed",inset:0,zIndex:0,pointerEvents:"none",overflow:"hidden"}}>
     <style>{NATURE_CSS}</style>
-
-    {/* ── Layer 1: Clouds (slowest, farthest) ── */}
     {CLOUDS.map(c => (
-      <div key={c.id} style={{
-        position:"absolute",
-        top: c.y,
-        left:0,
-        willChange:"transform",
-        animation:`cloud-drift ${c.dur}s linear ${c.delay}s infinite`,
-      }}>
+      <div key={c.id} style={{position:"absolute",top:c.y,left:0,willChange:"transform",animation:`cloud-drift ${c.dur}s linear ${c.delay}s infinite`}}>
         <CloudSVG w={c.w} opacity={c.opacity} />
       </div>
     ))}
-
-    {/* ── Layer 2: Birds (medium speed) ── */}
     {BIRDS.map(b => (
-      <div key={b.id} style={{
-        position:"absolute",
-        top: b.y,
-        left:0,
-        willChange:"transform",
-        animation:`bird-fly ${b.dur}s linear ${b.delay}s infinite`,
-        transform: b.flip ? "scaleX(-1)" : undefined,
-      }}>
-        {/* Wing flap wrapper */}
+      <div key={b.id} style={{position:"absolute",top:b.y,left:0,willChange:"transform",animation:`bird-fly ${b.dur}s linear ${b.delay}s infinite`,transform:b.flip?"scaleX(-1)":undefined}}>
         <div style={{animation:`wing-flap 0.45s ease-in-out infinite alternate`}}>
           <BirdSVG size={b.size} />
         </div>
       </div>
     ))}
-
-    {/* ── Layer 3: Leaves (fall from top) ── */}
     {LEAVES.map(l => (
-      <div key={l.id} style={{
-        position:"absolute",
-        top:"-30px",
-        left: l.x,
-        willChange:"transform, opacity",
-        animation:`leaf-fall ${l.dur}s ease-in ${l.delay}s infinite`,
-        "--drift": `${l.driftX}px`,
-        "--rot":   `${l.rot}deg`,
-      }}>
+      <div key={l.id} style={{position:"absolute",top:"-30px",left:l.x,willChange:"transform, opacity",animation:`leaf-fall ${l.dur}s ease-in ${l.delay}s infinite`,"--drift":`${l.driftX}px`,"--rot":`${l.rot}deg`}}>
         <LeafSVG size={l.size} />
       </div>
     ))}
@@ -112,43 +69,25 @@ const NatureBackground = memo(() => (
 ));
 
 const NATURE_CSS = `
-  /* Cloud drifts L→R across full viewport + a bit extra */
-  @keyframes cloud-drift {
-    from { transform: translateX(-20vw); }
-    to   { transform: translateX(115vw); }
-  }
-
-  /* Bird flies L→R with gentle sine-wave Y bob */
+  @keyframes cloud-drift { from{transform:translateX(-20vw)} to{transform:translateX(115vw)} }
   @keyframes bird-fly {
-    0%   { transform: translateX(-8vw)  translateY(0px); }
-    25%  { transform: translateX(25vw)  translateY(-18px); }
-    50%  { transform: translateX(50vw)  translateY(4px); }
-    75%  { transform: translateX(75vw)  translateY(-12px); }
-    100% { transform: translateX(112vw) translateY(0px); }
+    0%  {transform:translateX(-8vw)  translateY(0px)}
+    25% {transform:translateX(25vw)  translateY(-18px)}
+    50% {transform:translateX(50vw)  translateY(4px)}
+    75% {transform:translateX(75vw)  translateY(-12px)}
+    100%{transform:translateX(112vw) translateY(0px)}
   }
-
-  /* Wing flap — tiny vertical squish on the SVG */
-  @keyframes wing-flap {
-    from { transform: scaleY(1);    }
-    to   { transform: scaleY(0.72); }
-  }
-
-  /* Leaf falls top→bottom with horizontal drift + rotation */
+  @keyframes wing-flap { from{transform:scaleY(1)} to{transform:scaleY(0.72)} }
   @keyframes leaf-fall {
-    0%   { transform: translateY(-30px)   translateX(0px)          rotate(0deg);   opacity:0;    }
-    8%   { opacity: 0.7; }
-    90%  { opacity: 0.5; }
-    100% { transform: translateY(105vh)   translateX(var(--drift))  rotate(var(--rot)); opacity:0; }
+    0%  {transform:translateY(-30px) translateX(0px) rotate(0deg);opacity:0}
+    8%  {opacity:0.7}
+    90% {opacity:0.5}
+    100%{transform:translateY(105vh) translateX(var(--drift)) rotate(var(--rot));opacity:0}
   }
-
-  /* Respect reduced motion */
-  @media (prefers-reduced-motion: reduce) {
-    [style*="cloud-drift"], [style*="bird-fly"], [style*="leaf-fall"], [style*="wing-flap"] {
-      animation: none !important;
-    }
+  @media(prefers-reduced-motion:reduce){
+    [style*="cloud-drift"],[style*="bird-fly"],[style*="leaf-fall"],[style*="wing-flap"]{animation:none!important}
   }
 `;
-
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -170,6 +109,7 @@ const TAG_CFG = {
   "URGENT":     { bg:"#FEF6E0", color:"#8A6200", border:"#F5D97A" },
   "HIGH SALARY":{ bg:"#FFF3E0", color:"#B56000", border:"#FFC87A" },
   "REMOTE":     { bg:"#E8F3FC", color:"#1A5A8A", border:"#9ECEF5" },
+  "ONSITE":     { bg:"#F0F0F0", color:"#444444", border:"#CCCCCC" },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -188,7 +128,7 @@ function useIsMobile(bp = 768) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DATA
+// DATA — FIX: isRemote reads column "Remote" + fallback to address
 // ─────────────────────────────────────────────────────────────
 function parseSalary(raw) {
   if (!raw) return 0;
@@ -199,15 +139,37 @@ function parseSalary(raw) {
   return n;
 }
 
+// ── REMOTE DETECTION HELPER ──────────────────────────────────
+// Priority: cột "Remote" (chính xác nhất) → địa chỉ (fallback)
+function detectRemote(job) {
+  const remoteCol = (job["Remote"] || "").trim().toLowerCase();
+  // Nếu cột Remote có giá trị rõ ràng → dùng ngay
+  if (remoteCol === "remote" || remoteCol === "có" || remoteCol === "yes") return true;
+  if (remoteCol === "onsite" || remoteCol === "không" || remoteCol === "no") return false;
+  // Fallback: check địa chỉ
+  const addr = (job["Địa chỉ"] || "").toLowerCase();
+  return /remote|tại nhà|work from home|wfh/.test(addr);
+}
+
+// ── WORK MODE LABEL ──────────────────────────────────────────
+function getWorkMode(job) {
+  const remoteCol = (job["Remote"] || "").trim().toLowerCase();
+  if (remoteCol === "onsite") return "Onsite";
+  if (remoteCol === "remote") return "Remote";
+  if (remoteCol === "hybrid" || remoteCol === "linh hoạt") return "Hybrid";
+  // Fallback từ isRemote
+  return job.isRemote ? "Remote" : "Onsite";
+}
+
 function normalizeJob(job, allJobs) {
   const salaryMin = parseSalary(job["Lương Min"]);
   const salaryMax = parseSalary(job["Lương Max"]) || salaryMin;
   const rawQuan   = job["Quận"] || "";
-  const rawAddr   = job["Địa chỉ"] || "";
-  const isRemote  = /remote|tại nhà/i.test(rawAddr);
+  const isRemote  = detectRemote(job);                          // ← FIX
   const district  = rawQuan && rawQuan !== "Không rõ" ? rawQuan : "Không rõ";
   const area      = isRemote ? "Remote"
-                  : (AREA_MAP[district] || (rawAddr.includes("Huế") ? "Huế" : "Đà Nẵng"));
+                  : (AREA_MAP[district] || "Đà Nẵng");
+  const workMode  = getWorkMode({ ...job, isRemote });          // ← NEW
 
   let daysOld = 999;
   const rawDate = job["Ngày đăng bài"] || "";
@@ -243,10 +205,17 @@ function normalizeJob(job, allJobs) {
   if (score > 45) tags.push("HOT");
   if (/tuyển gấp|đi làm ngay|urgent/.test(content)) tags.push("URGENT");
   if (salaryMax >= 20_000_000) tags.push("HIGH SALARY");
+  // ← FIX: tag REMOTE/ONSITE dựa trên isRemote thực sự
   if (isRemote) tags.push("REMOTE");
 
-  return { ...job, salaryMin, salaryMax, district, area,
-    daysOld, freshnessStatus, isVerified: cCount >= 2, finalScore: score, tags };
+  return {
+    ...job,
+    salaryMin, salaryMax, district, area,
+    isRemote, workMode,                                         // ← NEW fields
+    daysOld, freshnessStatus,
+    isVerified: cCount >= 2,
+    finalScore: score, tags,
+  };
 }
 
 function deriveOptions(jobs) {
@@ -254,6 +223,8 @@ function deriveOptions(jobs) {
     areas:     [...new Set(jobs.map(j => j.area).filter(Boolean))].sort(),
     districts: [...new Set(jobs.map(j => j.district).filter(d => d !== "Không rõ"))].sort(),
     levels:    [...new Set(jobs.map(j => j["Level"]).filter(Boolean))].sort(),
+    // ← NEW: workMode options cho filter
+    workModes: [...new Set(jobs.map(j => j.workMode).filter(Boolean))].sort(),
   };
 }
 
@@ -267,8 +238,9 @@ export default function JobDiscovery() {
   const [selected, setSelected] = useState(null);
   const [search, setSearch]     = useState("");
   const [salary, setSalary]     = useState([0, 50]);
-  const [opts, setOpts]         = useState({ areas:[], districts:[], levels:[] });
-  const [filters, setFilters]   = useState({ preset:"All", areas:[], districts:[], levels:[] });
+  const [opts, setOpts]         = useState({ areas:[], districts:[], levels:[], workModes:[] });
+  // ← FIX: thêm workModes vào filters state
+  const [filters, setFilters]   = useState({ preset:"All", areas:[], districts:[], levels:[], workModes:[] });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
@@ -305,40 +277,49 @@ export default function JobDiscovery() {
   }, []);
 
   const reset = () => {
-    setFilters({ preset:"All", areas:[], districts:[], levels:[] });
+    setFilters({ preset:"All", areas:[], districts:[], levels:[], workModes:[] });
     setSalary([0, 50]);
     setSearch("");
   };
 
   const processed = useMemo(() => jobs.filter(j => {
     const q = search.toLowerCase();
-    if (q && !`${j["Vị Trí"]} ${j["Tên Công Ty"]} ${j["Kỹ Năng"]||""} ${j.district}`.toLowerCase().includes(q)) return false;
-    if (filters.areas.length     && !filters.areas.includes(j.area))          return false;
-    if (filters.districts.length && !filters.districts.includes(j.district))  return false;
-    if (filters.levels.length    && !filters.levels.includes(j["Level"]))     return false;
+    if (q && !`${j["Vị Trí"]} ${j["Tên Công Ty"]} ${j["Kỹ Năng"]||""} ${j.district} ${j.workMode}`.toLowerCase().includes(q)) return false;
+    if (filters.areas.length      && !filters.areas.includes(j.area))          return false;
+    if (filters.districts.length  && !filters.districts.includes(j.district))  return false;
+    if (filters.levels.length     && !filters.levels.includes(j["Level"]))     return false;
+    // ← FIX: filter workModes
+    if (filters.workModes.length  && !filters.workModes.includes(j.workMode))  return false;
     if (j.salaryMax > 0 && (j.salaryMax < salary[0]*1_000_000 || j.salaryMax > salary[1]*1_000_000)) return false;
     const p = filters.preset;
-    if (p === "New"        && j.freshnessStatus !== "new")                         return false;
-    if (p === "HighSalary" && j.salaryMax < 15_000_000)                            return false;
-    if (p === "Remote"     && j.area !== "Remote")                                 return false;
-    if (p === "POD"        && !(j["Vị Trí"]||"").toUpperCase().includes("POD"))    return false;
-    if (p === "EasyApply"  && (!j["Email"] || j["Email"] === "Không rõ"))          return false;
+    if (p === "New"        && j.freshnessStatus !== "new")                      return false;
+    if (p === "HighSalary" && j.salaryMax < 15_000_000)                         return false;
+    // ← FIX: Remote preset dùng j.isRemote thay vì j.area === "Remote"
+    if (p === "Remote"     && !j.isRemote)                                      return false;
+    if (p === "POD"        && !(j["Vị Trí"]||"").toUpperCase().includes("POD")) return false;
+    if (p === "EasyApply"  && (!j["Email"] || j["Email"] === "Không rõ"))       return false;
     return true;
   }), [jobs, search, filters, salary]);
 
   const isFiltering = search || filters.preset !== "All" || filters.areas.length ||
-    filters.districts.length || filters.levels.length || salary[0] > 0 || salary[1] < 50;
+    filters.districts.length || filters.levels.length || filters.workModes.length ||
+    salary[0] > 0 || salary[1] < 50;
   const activeCount = filters.areas.length + filters.districts.length + filters.levels.length
-    + (filters.preset !== "All" ? 1 : 0) + (salary[0] > 0 || salary[1] < 50 ? 1 : 0);
+    + filters.workModes.length
+    + (filters.preset !== "All" ? 1 : 0)
+    + (salary[0] > 0 || salary[1] < 50 ? 1 : 0);
 
-  const newJobs   = useMemo(() => processed.filter(j => j.freshnessStatus === "new").slice(0,8), [processed]);
-  const topSalary = useMemo(() => [...processed].sort((a,b) => b.salaryMax - a.salaryMax).filter(j => j.salaryMax > 0).slice(0,8), [processed]);
-  const podJobs   = useMemo(() => processed.filter(j => (j["Vị Trí"]||"").toUpperCase().includes("POD")).slice(0,8), [processed]);
-  const central   = useMemo(() => processed.filter(j => j.area === "Central").slice(0,8), [processed]);
+  const newJobs    = useMemo(() => processed.filter(j => j.freshnessStatus === "new").slice(0,8), [processed]);
+  const topSalary  = useMemo(() => [...processed].sort((a,b) => b.salaryMax - a.salaryMax).filter(j => j.salaryMax > 0).slice(0,8), [processed]);
+  const podJobs    = useMemo(() => processed.filter(j => (j["Vị Trí"]||"").toUpperCase().includes("POD")).slice(0,8), [processed]);
+  const central    = useMemo(() => processed.filter(j => j.area === "Central").slice(0,8), [processed]);
+  // ← NEW: shelf riêng cho remote
+  const remoteJobs = useMemo(() => processed.filter(j => j.isRemote).slice(0,8), [processed]);
 
-  const todayN = jobs.filter(j => j.daysOld <= 1).length;
-  const verN   = jobs.filter(j => j.isVerified).length;
-  const emailN = jobs.filter(j => j["Email"] && j["Email"] !== "Không rõ").length;
+  const todayN  = jobs.filter(j => j.daysOld <= 1).length;
+  const verN    = jobs.filter(j => j.isVerified).length;
+  const emailN  = jobs.filter(j => j["Email"] && j["Email"] !== "Không rõ").length;
+  const remoteN = jobs.filter(j => j.isRemote).length;  // ← NEW stat
 
   const P = isMobile ? "16px" : "32px";
 
@@ -352,29 +333,16 @@ export default function JobDiscovery() {
   );
 
   return (
-    <div style={{
-      background:"linear-gradient(180deg,#EDE5D5 0%,#F4EFE8 30%,#F0EAE0 100%)",
-      minHeight:"100vh",fontFamily:"'Jost',sans-serif",color:"#28200F",position:"relative",
-    }}>
+    <div style={{background:"linear-gradient(180deg,#EDE5D5 0%,#F4EFE8 30%,#F0EAE0 100%)",minHeight:"100vh",fontFamily:"'Jost',sans-serif",color:"#28200F",position:"relative"}}>
       <style>{CSS}</style>
-
-      {/* ══════════════════ NATURE BACKGROUND ══════════════════ */}
       <NatureBackground />
 
-      {/* ══════════════════ HEADER — flows with page ══════════════════ */}
-      <header style={{
-        background:"rgba(255,252,248,0.88)",
-        backdropFilter:"blur(12px)",
-        WebkitBackdropFilter:"blur(12px)",
-        borderBottom:"1.5px solid var(--border)",
-        boxShadow:"0 2px 16px rgba(40,32,15,0.06)",
-        position:"relative", zIndex:10,
-      }}>
+      {/* ══════════ HEADER ══════════ */}
+      <header style={{background:"rgba(255,252,248,0.88)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:"1.5px solid var(--border)",boxShadow:"0 2px 16px rgba(40,32,15,0.06)",position:"relative",zIndex:10}}>
         <div style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"14px":"24px"} ${P}`}}>
 
-          {/* Row A: brand + search + stats */}
+          {/* Row A */}
           <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-
             {/* Brand */}
             <div style={{flexShrink:0,paddingRight:isMobile?0:20,borderRight:isMobile?"none":"1.5px solid var(--border)"}}>
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:isMobile?26:34,fontWeight:700,letterSpacing:"-0.01em",color:"var(--ink)",lineHeight:1}}>
@@ -388,26 +356,19 @@ export default function JobDiscovery() {
             {/* Search */}
             <div style={{flex:1,minWidth:180,position:"relative"}}>
               <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16,opacity:0.35,pointerEvents:"none"}}>🔍</span>
-              <input
-                className="sinput"
-                style={{paddingLeft:44}}
-                type="text"
-                value={search}
-                placeholder={isMobile ? "Tìm vị trí, kỹ năng..." : "Tìm vị trí, công ty, kỹ năng, quận..."}
-                onChange={e => setSearch(e.target.value)}
-              />
-              {search && (
-                <button className="search-clear" onClick={() => setSearch("")}>✕</button>
-              )}
+              <input className="sinput" style={{paddingLeft:44}} type="text" value={search}
+                placeholder={isMobile?"Tìm vị trí, kỹ năng...":"Tìm vị trí, công ty, kỹ năng, quận, remote..."}
+                onChange={e => setSearch(e.target.value)} />
+              {search && <button className="search-clear" onClick={() => setSearch("")}>✕</button>}
             </div>
 
-            {/* Stats — desktop */}
+            {/* Stats — desktop: thêm Remote stat */}
             {!isMobile && (
               <div style={{display:"flex",gap:24,flexShrink:0,paddingLeft:20,borderLeft:"1.5px solid var(--border)"}}>
                 {[
                   {v:jobs.length, l:"Active",   c:"var(--ink)"},
                   {v:todayN,      l:"Hôm nay",  c:"var(--green)"},
-                  {v:verN,        l:"Verified", c:"var(--acc)"},
+                  {v:remoteN,     l:"Remote",   c:"var(--acc)"},   // ← REPLACED verN với remoteN
                   {v:emailN,      l:"Có Email", c:"var(--ink)"},
                 ].map(({v,l,c}) => (
                   <div key={l} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -418,53 +379,21 @@ export default function JobDiscovery() {
               </div>
             )}
 
-            {/* Toggle filter button (desktop) */}
+            {/* Toggle filter */}
             {!isMobile && (
-              <button
-                onClick={() => setFiltersOpen(o => !o)}
-                style={{
-                  flexShrink:0,
-                  display:"flex",alignItems:"center",gap:7,
-                  padding:"10px 16px",
-                  background: filtersOpen ? "var(--ink)" : "white",
-                  color: filtersOpen ? "var(--bg)" : "var(--ink2)",
-                  border:"1.5px solid var(--border)",
-                  borderRadius:6,
-                  cursor:"pointer",
-                  fontFamily:"'Jost',sans-serif",
-                  fontSize:13,
-                  fontWeight:600,
-                  letterSpacing:"0.04em",
-                  transition:"all 0.2s ease",
-                }}
-              >
+              <button onClick={() => setFiltersOpen(o => !o)} style={{flexShrink:0,display:"flex",alignItems:"center",gap:7,padding:"10px 16px",background:filtersOpen?"var(--ink)":"white",color:filtersOpen?"var(--bg)":"var(--ink2)",border:"1.5px solid var(--border)",borderRadius:6,cursor:"pointer",fontFamily:"'Jost',sans-serif",fontSize:13,fontWeight:600,letterSpacing:"0.04em",transition:"all 0.2s ease"}}>
                 <span style={{fontSize:14}}>⚙️</span>
                 Bộ lọc
                 {activeCount > 0 && (
-                  <span style={{
-                    background: filtersOpen ? "rgba(255,255,255,0.25)" : "var(--acc)",
-                    color:"white",
-                    borderRadius:20,
-                    padding:"1px 8px",
-                    fontSize:11,
-                    fontWeight:700,
-                  }}>{activeCount}</span>
+                  <span style={{background:filtersOpen?"rgba(255,255,255,0.25)":"var(--acc)",color:"white",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>{activeCount}</span>
                 )}
               </button>
             )}
           </div>
 
-          {/* ── Filter panel — collapsible, desktop only ── */}
+          {/* Filter panel — collapsible desktop */}
           {!isMobile && (
-            <div
-              className="filter-panel"
-              style={{
-                maxHeight: filtersOpen ? "500px" : "0px",
-                opacity: filtersOpen ? 1 : 0,
-                overflow:"hidden",
-                transition:"max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease",
-              }}
-            >
+            <div style={{maxHeight:filtersOpen?"600px":"0px",opacity:filtersOpen?1:0,overflow:"hidden",transition:"max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease"}}>
               <div style={{borderTop:"1px solid var(--border)",paddingTop:18,marginTop:16,display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-start"}}>
 
                 {/* Preset chips */}
@@ -478,16 +407,26 @@ export default function JobDiscovery() {
                       {k:"POD",e:"🚀",l:"POD Only"},
                       {k:"EasyApply",e:"🎯",l:"Easy Apply"},
                     ].map(({k,e,l}) => (
-                      <button
-                        key={k}
-                        className={`preset-chip${filters.preset===k?" on":""}`}
-                        onClick={() => setFilters(f => ({...f, preset:f.preset===k?"All":k}))}
-                      >
+                      <button key={k} className={`preset-chip${filters.preset===k?" on":""}`}
+                        onClick={() => setFilters(f => ({...f,preset:f.preset===k?"All":k}))}>
                         <span>{e}</span>{l}
                       </button>
                     ))}
                   </div>
                 </div>
+
+                <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
+
+                {/* ← NEW: Work Mode filter */}
+                {opts.workModes.length > 0 && (
+                  <FilterBlock label="Hình thức">
+                    {opts.workModes.map(m => (
+                      <button key={m} className={`fpill${filters.workModes.includes(m)?" on":""}`} onClick={() => toggle("workModes",m)}>
+                        {m === "Remote" ? "💻 Remote" : m === "Onsite" ? "🏢 Onsite" : m === "Hybrid" ? "🔀 Hybrid" : m}
+                      </button>
+                    ))}
+                  </FilterBlock>
+                )}
 
                 <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
 
@@ -536,11 +475,12 @@ export default function JobDiscovery() {
             </div>
           )}
 
-          {/* Active filter summary (desktop, filters closed) */}
+          {/* Active filter summary chips (desktop, panel closed) */}
           {!isMobile && !filtersOpen && activeCount > 0 && (
             <div style={{display:"flex",alignItems:"center",gap:6,marginTop:12,flexWrap:"wrap"}}>
               <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Lọc:</span>
               {filters.preset !== "All" && <Chip>{filters.preset}</Chip>}
+              {filters.workModes.map(m => <Chip key={m}>{m}</Chip>)}
               {filters.areas.map(a => <Chip key={a}>{a}</Chip>)}
               {filters.districts.map(d => <Chip key={d}>{d}</Chip>)}
               {filters.levels.map(l => <Chip key={l}>{l}</Chip>)}
@@ -549,23 +489,20 @@ export default function JobDiscovery() {
               <button onClick={reset} style={{fontSize:11,fontWeight:700,color:"var(--red)",background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:4,padding:"3px 10px",cursor:"pointer",fontFamily:"'Jost',sans-serif",marginLeft:4}}>✕</button>
             </div>
           )}
-
         </div>
       </header>
 
-      {/* ══════════════════ MAIN ══════════════════ */}
+      {/* ══════════ MAIN ══════════ */}
       <main style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`,position:"relative",zIndex:1}}>
 
-        {/* Mobile: active filter summary */}
+        {/* Mobile: filter summary */}
         {isMobile && isFiltering && (
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
             <span style={{fontFamily:"Inconsolata,monospace",fontSize:12,color:"var(--ink3)"}}>{processed.length} kết quả</span>
             {activeCount > 0 && (
               <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,background:"var(--acc)",color:"white",borderRadius:20,padding:"2px 9px"}}>{activeCount} lọc</span>
             )}
-            <button onClick={reset} style={{fontSize:12,fontWeight:700,color:"var(--red)",background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:4,padding:"4px 10px",cursor:"pointer",fontFamily:"'Jost',sans-serif",marginLeft:"auto"}}>
-              ✕ Reset
-            </button>
+            <button onClick={reset} style={{fontSize:12,fontWeight:700,color:"var(--red)",background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:4,padding:"4px 10px",cursor:"pointer",fontFamily:"'Jost',sans-serif",marginLeft:"auto"}}>✕ Reset</button>
           </div>
         )}
 
@@ -574,19 +511,17 @@ export default function JobDiscovery() {
             <SectionHead icon="🔍" title={isMobile?"Kết Quả":"Kết Quả Tìm Kiếm"} sub={`${processed.length} vị trí phù hợp`} isMobile={isMobile} />
             {processed.length === 0
               ? <Empty onReset={reset} />
-              : (
-                <div className="card-grid">
-                  {processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} isMobile={isMobile} idx={i} />)}
-                </div>
-              )
+              : <div className="card-grid">{processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} isMobile={isMobile} idx={i} />)}</div>
             }
           </section>
         ) : (
           <>
-            {newJobs.length > 0   && <Shelf icon="🕐" title="Job Mới Nhất"     sub={`${newJobs.length} vị trí trong 3 ngày qua`}   jobs={newJobs}   onSel={setSelected} isMobile={isMobile} />}
-            {topSalary.length > 0 && <Shelf icon="💰" title="Top Lương Cao"    sub="Sắp xếp theo lương cao nhất"                   jobs={topSalary} onSel={setSelected} isMobile={isMobile} />}
-            {podJobs.length > 0   && <Shelf icon="🚀" title="POD & E-Commerce" sub="Niche tăng trưởng — Thị trường quốc tế"        jobs={podJobs}   onSel={setSelected} isMobile={isMobile} />}
-            {central.length > 0   && <Shelf icon="📍" title="Khu Trung Tâm"    sub="Hải Châu · Thanh Khê — Dễ đi làm"             jobs={central}   onSel={setSelected} isMobile={isMobile} />}
+            {newJobs.length > 0    && <Shelf icon="🕐" title="Job Mới Nhất"     sub={`${newJobs.length} vị trí trong 3 ngày qua`}     jobs={newJobs}    onSel={setSelected} isMobile={isMobile} />}
+            {topSalary.length > 0  && <Shelf icon="💰" title="Top Lương Cao"    sub="Sắp xếp theo lương cao nhất"                     jobs={topSalary}  onSel={setSelected} isMobile={isMobile} />}
+            {/* ← NEW: Remote shelf chỉ hiện khi có job remote */}
+            {remoteJobs.length > 0 && <Shelf icon="💻" title="Làm Việc Remote"  sub={`${remoteJobs.length} vị trí work from anywhere`} jobs={remoteJobs} onSel={setSelected} isMobile={isMobile} />}
+            {podJobs.length > 0    && <Shelf icon="🚀" title="POD & E-Commerce" sub="Niche tăng trưởng — Thị trường quốc tế"          jobs={podJobs}    onSel={setSelected} isMobile={isMobile} />}
+            {central.length > 0    && <Shelf icon="📍" title="Khu Trung Tâm"    sub="Hải Châu · Thanh Khê — Dễ đi làm"               jobs={central}    onSel={setSelected} isMobile={isMobile} />}
             <section style={{marginTop:isMobile?32:56}}>
               <SectionHead icon="📋" title="Tất Cả Cơ Hội" sub={`${processed.length} vị trí · Điểm cao nhất lên đầu`} isMobile={isMobile} />
               <div className="card-grid">
@@ -597,7 +532,7 @@ export default function JobDiscovery() {
         )}
       </main>
 
-      {/* ══════════════════ MOBILE FILTER FAB ══════════════════ */}
+      {/* Mobile FAB */}
       {isMobile && (
         <button className="filter-fab" onClick={() => setDrawerOpen(true)}>
           <span style={{fontSize:16}}>⚙️</span>
@@ -605,7 +540,7 @@ export default function JobDiscovery() {
         </button>
       )}
 
-      {/* ══════════════════ MOBILE FILTER DRAWER ══════════════════ */}
+      {/* Mobile Drawer */}
       {isMobile && drawerOpen && (
         <FilterDrawer
           opts={opts} filters={filters} salary={salary}
@@ -615,7 +550,7 @@ export default function JobDiscovery() {
         />
       )}
 
-      {/* ══════════════════ DETAIL PANEL ══════════════════ */}
+      {/* Detail Panel */}
       {selected && <DetailPanel job={selected} onClose={() => setSelected(null)} isMobile={isMobile} />}
     </div>
   );
@@ -631,6 +566,7 @@ const CSS = `
     --bg:#F4EFE8; --bg2:#EDE5D8; --bg3:#E4D9CA;
     --border:#CFC3B0; --ink:#28200F; --ink2:#5E5040; --ink3:#9C8C78;
     --acc:#B8621A; --acc2:#F0DCC8; --green:#3E6B48; --red:#A83030;
+    --blue:#1A5A8A;
     --shadow:0 2px 12px rgba(40,32,15,0.07);
     --shadow2:0 8px 32px rgba(40,32,15,0.12);
   }
@@ -799,6 +735,11 @@ const CSS = `
   .apply-btn:hover { background:var(--acc); transform:translateY(-1px); box-shadow:0 6px 20px rgba(184,98,26,0.3); }
   @media(max-width:767px) { .apply-btn { padding:20px; font-size:17px; border-radius:10px; } }
 
+  /* Work mode badge */
+  .work-badge-remote  { background:#E8F3FC; color:#1A5A8A; border:1px solid #9ECEF5; }
+  .work-badge-onsite  { background:#F2F2F0; color:#5E5040; border:1px solid #CFC3B0; }
+  .work-badge-hybrid  { background:#F0F8EC; color:#3E6B48; border:1px solid #A8D8A8; }
+
   @keyframes spin { to{transform:rotate(360deg)} }
 
   .card-grid > *:nth-child(1)  { animation-delay:0.02s }
@@ -878,6 +819,17 @@ function Tag({ name }) {
   );
 }
 
+// ← NEW: WorkModeBadge hiển thị trên card
+function WorkModeBadge({ mode }) {
+  const cls = mode === "Remote" ? "work-badge-remote" : mode === "Hybrid" ? "work-badge-hybrid" : "work-badge-onsite";
+  const icon = mode === "Remote" ? "💻" : mode === "Hybrid" ? "🔀" : "🏢";
+  return (
+    <span className={cls} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",fontSize:10,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",borderRadius:20,fontFamily:"Inconsolata,monospace"}}>
+      {icon} {mode}
+    </span>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHELF
 // ─────────────────────────────────────────────────────────────
@@ -909,7 +861,7 @@ function Shelf({ icon, title, sub, jobs, onSel, isMobile }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// JOB CARD
+// JOB CARD — thêm WorkModeBadge
 // ─────────────────────────────────────────────────────────────
 function JobCard({ job, onClick, isMobile, idx = 0 }) {
   const { salaryMax:sMax, salaryMin:sMin } = job;
@@ -921,8 +873,11 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
   return (
     <div className="jcard" onClick={onClick} style={{height:"100%",animationDelay:`${Math.min(idx*0.04,0.3)}s`}}>
       <div style={{padding:pad}}>
+        {/* Tags row */}
         <div style={{display:"flex",gap:5,flexWrap:"wrap",minHeight:22,marginBottom:10}}>
-          {job.tags.slice(0,4).map(t => <Tag key={t} name={t} />)}
+          {job.tags.slice(0,3).map(t => <Tag key={t} name={t} />)}
+          {/* ← NEW: WorkMode badge kế tags */}
+          <WorkModeBadge mode={job.workMode} />
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
           <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -939,7 +894,10 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
           {sMax > 0 && <span style={{fontSize:11,color:"var(--ink3)"}}>VND</span>}
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-          <span style={{fontSize:13,color:"var(--ink2)"}}>📍 {job.district!=="Không rõ"?job.district:job.area}</span>
+          {/* ← FIX: Remote job hiển thị "Remote" thay vì quận */}
+          <span style={{fontSize:13,color:"var(--ink2)"}}>
+            {job.isRemote ? "💻 Làm từ xa" : `📍 ${job.district!=="Không rõ"?job.district:job.area}`}
+          </span>
           {freshLabel && <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",background:"var(--bg2)",padding:"2px 8px",borderRadius:20}}>{freshLabel}</span>}
         </div>
         {job["Kỹ Năng"] && (
@@ -964,7 +922,7 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DETAIL PANEL
+// DETAIL PANEL — thêm Work Mode vào info grid
 // ─────────────────────────────────────────────────────────────
 function DetailPanel({ job, onClose, isMobile }) {
   const [imgErr, setImgErr] = useState(false);
@@ -983,6 +941,11 @@ function DetailPanel({ job, onClose, isMobile }) {
   const rawDate = job["Ngày đăng bài"] || "";
   const postedDate = rawDate ? (rawDate.split(" ")[1] || rawDate) : "";
   const freshLabel = job.daysOld===0?"hôm nay":job.daysOld===1?"hôm qua":job.daysOld<99?`${job.daysOld} ngày trước`:"";
+
+  // ← NEW: địa điểm hiển thị đúng cho remote job
+  const locationDisplay = job.isRemote
+    ? "Làm việc từ xa"
+    : (job.district !== "Không rõ" ? `${job.district}, ${job.area}` : job["Địa chỉ"] || job.area);
 
   const ImageBlock = () => (
     imgUrl && !imgErr
@@ -1005,6 +968,8 @@ function DetailPanel({ job, onClose, isMobile }) {
       )}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:isMobile?14:20}}>
         {job.tags.map(t => <Tag key={t} name={t} />)}
+        {/* ← NEW: WorkMode badge trong detail */}
+        <WorkModeBadge mode={job.workMode} />
         {job.isVerified && (
           <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 11px",fontSize:11,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",borderRadius:3,fontFamily:"Inconsolata,monospace",background:"#E8F3FC",color:"#1A5A8A",border:"1px solid #9ECEF5"}}>✓ Verified</span>
         )}
@@ -1019,12 +984,13 @@ function DetailPanel({ job, onClose, isMobile }) {
         </div>
       )}
       <div style={{height:1,background:"var(--border)",marginBottom:isMobile?18:28}} />
+      {/* ← FIX: info grid — Platform thay bằng Work Mode */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:isMobile?10:14,marginBottom:isMobile?22:32}}>
         {[
-          {l:"Mức lương",v:salLabel,          a:"var(--acc)"},
-          {l:"Địa điểm", v:job.district!=="Không rõ"?`${job.district}, ${job.area}`:job["Địa chỉ"]||job.area, a:"var(--green)"},
-          {l:"Level",    v:job["Level"]||"—", a:"var(--ink2)"},
-          {l:"Platform", v:job["Platform"]&&job["Platform"]!=="Không rõ"?job["Platform"]:"—", a:"var(--ink2)"},
+          {l:"Mức lương", v:salLabel,               a:"var(--acc)"},
+          {l:"Địa điểm",  v:locationDisplay,         a:"var(--green)"},
+          {l:"Level",     v:job["Level"]||"—",       a:"var(--ink2)"},
+          {l:"Hình thức", v:job.workMode||"—",       a:job.isRemote?"var(--blue)":"var(--ink2)"},  // ← NEW
         ].map(({l,v,a}) => (
           <div key={l} style={{background:"white",border:"1.5px solid var(--border)",borderRadius:6,padding:isMobile?"12px 14px":"16px 18px"}}>
             <div style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:a,opacity:0.85,marginBottom:5}}>{l}</div>
@@ -1032,6 +998,13 @@ function DetailPanel({ job, onClose, isMobile }) {
           </div>
         ))}
       </div>
+      {/* Platform nếu có */}
+      {job["Platform"] && job["Platform"] !== "Không rõ" && (
+        <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFF8F0",border:"1px solid #E8C9A0",borderRadius:6,padding:"8px 14px",marginBottom:isMobile?14:20}}>
+          <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--acc)"}}>Platform:</span>
+          <span style={{fontSize:13,fontWeight:700,color:"var(--ink)"}}>{job["Platform"]}</span>
+        </div>
+      )}
       <div style={{height:1,background:"var(--border)",marginBottom:isMobile?18:28}} />
       {job["Nội Dung Gốc"] && (
         <div style={{marginBottom:isMobile?18:28}}>
@@ -1055,7 +1028,7 @@ function DetailPanel({ job, onClose, isMobile }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="panel" style={{width: isMobile ? "100%" : "min(92vw,960px)"}} onClick={e => e.stopPropagation()}>
+      <div className="panel" style={{width:isMobile?"100%":"min(92vw,960px)"}} onClick={e => e.stopPropagation()}>
         {isMobile && <div style={{width:36,height:4,background:"var(--border)",borderRadius:2,margin:"12px auto 0",flexShrink:0}} />}
         {isMobile ? (
           <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,overflowY:"auto"}}>
@@ -1082,7 +1055,7 @@ function DetailPanel({ job, onClose, isMobile }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FILTER DRAWER (mobile)
+// FILTER DRAWER (mobile) — thêm Work Mode section
 // ─────────────────────────────────────────────────────────────
 function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, reset, processed, onClose }) {
   return (
@@ -1097,6 +1070,7 @@ function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, re
               <button onClick={onClose} style={{fontSize:13,fontWeight:700,color:"white",background:"var(--ink)",border:"none",borderRadius:4,padding:"7px 16px",cursor:"pointer",fontFamily:"'Jost',sans-serif"}}>Xong ✓</button>
             </div>
           </div>
+
           <DrawerBlock label="Quick filter">
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {[{k:"New",e:"🕐",l:"Mới nhất"},{k:"HighSalary",e:"💰",l:"Lương >15M"},{k:"Remote",e:"💻",l:"Remote"},{k:"POD",e:"🚀",l:"POD Only"},{k:"EasyApply",e:"🎯",l:"Easy Apply"}].map(({k,e,l}) => (
@@ -1104,6 +1078,20 @@ function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, re
               ))}
             </div>
           </DrawerBlock>
+
+          {/* ← NEW: Work Mode filter trong drawer */}
+          {opts.workModes.length > 0 && (
+            <DrawerBlock label="Hình thức làm việc">
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {opts.workModes.map(m => (
+                  <button key={m} className={`fpill${filters.workModes.includes(m)?" on":""}`} onClick={() => toggle("workModes",m)}>
+                    {m === "Remote" ? "💻 Remote" : m === "Onsite" ? "🏢 Onsite" : m === "Hybrid" ? "🔀 Hybrid" : m}
+                  </button>
+                ))}
+              </div>
+            </DrawerBlock>
+          )}
+
           {opts.areas.length > 0 && (
             <DrawerBlock label="Khu vực">
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
