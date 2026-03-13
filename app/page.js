@@ -894,9 +894,8 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
           {sMax > 0 && <span style={{fontSize:11,color:"var(--ink3)"}}>VND</span>}
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-          {/* ← FIX: Remote job hiển thị "Remote" thay vì quận */}
           <span style={{fontSize:13,color:"var(--ink2)"}}>
-            {job.isRemote ? "💻 Làm từ xa" : `📍 ${job.district!=="Không rõ"?job.district:job.area}`}
+            {job.isRemote ? "💻 Làm từ xa" : `📍 ${job.district && job.district !== "Không rõ" ? job.district : (job.area && job.area !== "Không rõ" ? job.area : "")}`}
           </span>
           {freshLabel && <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)",background:"var(--bg2)",padding:"2px 8px",borderRadius:20}}>{freshLabel}</span>}
         </div>
@@ -943,9 +942,10 @@ function DetailPanel({ job, onClose, isMobile }) {
   const freshLabel = job.daysOld===0?"hôm nay":job.daysOld===1?"hôm qua":job.daysOld<99?`${job.daysOld} ngày trước`:"";
 
   // ← NEW: địa điểm hiển thị đúng cho remote job
-  const locationDisplay = job.isRemote
-    ? "Làm việc từ xa"
-    : (job.district !== "Không rõ" ? `${job.district}, ${job.area}` : job["Địa chỉ"] || job.area);
+  const _d = job.district && job.district !== "Không rõ" ? job.district : "";
+  const _a = job.area && job.area !== "Không rõ" ? job.area : "";
+  const _addr = job["Địa chỉ"] && job["Địa chỉ"] !== "Không rõ" ? job["Địa chỉ"] : "";
+  const locationDisplay = job.isRemote ? "Làm việc từ xa" : _d ? (_a && _a !== _d ? `${_d}, ${_a}` : _d) : _addr || _a || "";
 
   const ImageBlock = () => (
     imgUrl && !imgErr
