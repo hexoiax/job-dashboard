@@ -1,8 +1,14 @@
 "use client";
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 
 // ─────────────────────────────────────────────────────────────
-// NATURE BACKGROUND — 3 layers: clouds · birds · leaves
+// CONFIG
+// ─────────────────────────────────────────────────────────────
+const SHEET_API  = "https://api.steinhq.com/v1/storages/69b224fbaffba40a625db5bd";
+const APPLY_API  = "/api/quick-apply"; // backend route nhận POST và gửi mail + ghi sheet
+
+// ─────────────────────────────────────────────────────────────
+// NATURE BACKGROUND
 // ─────────────────────────────────────────────────────────────
 const CloudSVG = ({ w = 90, opacity = 0.18 }) => (
   <svg width={w} height={w * 0.55} viewBox="0 0 120 66" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display:"block"}}>
@@ -112,8 +118,19 @@ const TAG_CFG = {
   "ONSITE":     { bg:"#F0F0F0", color:"#444444", border:"#CCCCCC" },
 };
 
+// localStorage key cho apply history (client-side dedupe guard)
+const APPLIED_KEY = "dne_applied_jobs";
+function getApplied() {
+  try { return JSON.parse(localStorage.getItem(APPLIED_KEY) || "{}"); } catch { return {}; }
+}
+function markApplied(jobId) {
+  const a = getApplied(); a[jobId] = Date.now();
+  try { localStorage.setItem(APPLIED_KEY, JSON.stringify(a)); } catch {}
+}
+function hasApplied(jobId) { return !!getApplied()[jobId]; }
+
 // ─────────────────────────────────────────────────────────────
-// HOOK
+// HOOKS
 // ─────────────────────────────────────────────────────────────
 function useIsMobile(bp = 768) {
   const [mobile, setMobile] = useState(() =>
@@ -128,7 +145,7 @@ function useIsMobile(bp = 768) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DATA — FIX: isRemote reads column "Remote" + fallback to address
+// DATA UTILS
 // ─────────────────────────────────────────────────────────────
 function parseSalary(raw) {
   if (!raw) return 0;
@@ -139,37 +156,38 @@ function parseSalary(raw) {
   return n;
 }
 
-// ── REMOTE DETECTION HELPER ──────────────────────────────────
-// Priority: cột "Remote" (chính xác nhất) → địa chỉ (fallback)
 function detectRemote(job) {
   const remoteCol = (job["Remote"] || "").trim().toLowerCase();
-  // Nếu cột Remote có giá trị rõ ràng → dùng ngay
   if (remoteCol === "remote" || remoteCol === "có" || remoteCol === "yes") return true;
   if (remoteCol === "onsite" || remoteCol === "không" || remoteCol === "no") return false;
-  // Fallback: check địa chỉ
   const addr = (job["Địa chỉ"] || "").toLowerCase();
   return /remote|tại nhà|work from home|wfh/.test(addr);
 }
 
-// ── WORK MODE LABEL ──────────────────────────────────────────
 function getWorkMode(job) {
   const remoteCol = (job["Remote"] || "").trim().toLowerCase();
   if (remoteCol === "onsite") return "Onsite";
   if (remoteCol === "remote") return "Remote";
   if (remoteCol === "hybrid" || remoteCol === "linh hoạt") return "Hybrid";
-  // Fallback từ isRemote
   return job.isRemote ? "Remote" : "Onsite";
+}
+
+// Job có recruiterEmail hợp lệ thì cho Quick Apply
+function getApplyEligibility(job) {
+  const email = (job["Email"] || "").trim();
+  if (!email || email === "Không rõ") return "external_apply_only";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "unavailable";
+  return "quick_apply_available";
 }
 
 function normalizeJob(job, allJobs) {
   const salaryMin = parseSalary(job["Lương Min"]);
   const salaryMax = parseSalary(job["Lương Max"]) || salaryMin;
   const rawQuan   = job["Quận"] || "";
-  const isRemote  = detectRemote(job);                          // ← FIX
+  const isRemote  = detectRemote(job);
   const district  = rawQuan && rawQuan !== "Không rõ" ? rawQuan : "Không rõ";
-  const area      = isRemote ? "Remote"
-                  : (AREA_MAP[district] || "Đà Nẵng");
-  const workMode  = getWorkMode({ ...job, isRemote });          // ← NEW
+  const area      = isRemote ? "Remote" : (AREA_MAP[district] || "Đà Nẵng");
+  const workMode  = getWorkMode({ ...job, isRemote });
 
   let daysOld = 999;
   const rawDate = job["Ngày đăng bài"] || "";
@@ -205,16 +223,21 @@ function normalizeJob(job, allJobs) {
   if (score > 45) tags.push("HOT");
   if (/tuyển gấp|đi làm ngay|urgent/.test(content)) tags.push("URGENT");
   if (salaryMax >= 20_000_000) tags.push("HIGH SALARY");
-  // ← FIX: tag REMOTE/ONSITE dựa trên isRemote thực sự
   if (isRemote) tags.push("REMOTE");
+
+  // jobId dùng cho dedupe — ưu tiên field jobId, fallback index-based key
+  const jobId = job["jobId"] || job["ID"] || `${job["Tên Công Ty"]}_${job["Vị Trí"]}`.replace(/\s/g,"_");
+  const applyEligibility = getApplyEligibility(job);
 
   return {
     ...job,
+    jobId,
     salaryMin, salaryMax, district, area,
-    isRemote, workMode,                                         // ← NEW fields
+    isRemote, workMode,
     daysOld, freshnessStatus,
     isVerified: cCount >= 2,
     finalScore: score, tags,
+    applyEligibility,
   };
 }
 
@@ -223,9 +246,355 @@ function deriveOptions(jobs) {
     areas:     [...new Set(jobs.map(j => j.area).filter(Boolean))].sort(),
     districts: [...new Set(jobs.map(j => j.district).filter(d => d !== "Không rõ"))].sort(),
     levels:    [...new Set(jobs.map(j => j["Level"]).filter(Boolean))].sort(),
-    // ← NEW: workMode options cho filter
     workModes: [...new Set(jobs.map(j => j.workMode).filter(Boolean))].sort(),
   };
+}
+
+// Build email body từ template
+function buildEmailDraft(job, profile) {
+  const subject = `Ứng tuyển ${job["Vị Trí"]} - ${profile.fullName}`;
+  const body = `Xin chào ${job["Tên Công Ty"]} / Bộ phận tuyển dụng,
+
+Tôi là ${profile.fullName}, tôi muốn ứng tuyển vào vị trí ${job["Vị Trí"]}.
+
+${profile.defaultNote || "Tôi có kinh nghiệm phù hợp với vị trí này và rất mong được đóng góp cho công ty."}
+
+Tôi đã đính kèm CV trong email này để anh/chị tham khảo.
+Rất mong có cơ hội trao đổi thêm.
+
+Trân trọng,
+${profile.fullName}
+${profile.email}${profile.phone ? "\n" + profile.phone : ""}${profile.portfolioUrl ? "\nPortfolio: " + profile.portfolioUrl : ""}${profile.linkedinUrl ? "\nLinkedIn: " + profile.linkedinUrl : ""}`;
+  return { subject, body };
+}
+
+// ─────────────────────────────────────────────────────────────
+// QUICK APPLY MODAL
+// ─────────────────────────────────────────────────────────────
+// step: "profile" | "compose" | "preview" | "sending" | "success" | "error"
+function QuickApplyModal({ job, onClose, onSuccess }) {
+  const isMobile = useIsMobile();
+  const [step, setStep]       = useState("profile");
+  const [sending, setSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [dirty, setDirty]     = useState(false); // unsaved compose changes
+
+  // Profile fields
+  const [profile, setProfile] = useState({
+    fullName: "", email: "", phone: "",
+    defaultNote: "", portfolioUrl: "", linkedinUrl: "",
+  });
+  const [profileErrors, setProfileErrors] = useState({});
+
+  // CV upload
+  const [cvFile, setCvFile]   = useState(null);
+  const [cvError, setCvError] = useState("");
+  const fileRef = useRef();
+
+  // Email compose
+  const [subject, setSubject] = useState("");
+  const [body, setBody]       = useState("");
+
+  // Khi profile đủ → auto-fill draft
+  function goToCompose() {
+    const errs = {};
+    if (!profile.fullName.trim()) errs.fullName = "Bắt buộc";
+    if (!profile.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) errs.email = "Email không hợp lệ";
+    if (!cvFile) { setCvError("Vui lòng chọn CV PDF"); return; }
+    if (Object.keys(errs).length) { setProfileErrors(errs); return; }
+    const draft = buildEmailDraft(job, profile);
+    setSubject(draft.subject);
+    setBody(draft.body);
+    setStep("compose");
+  }
+
+  function handleCvChange(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.type !== "application/pdf") { setCvError("Chỉ nhận file PDF"); return; }
+    if (f.size > 5 * 1024 * 1024) { setCvError("File tối đa 5MB"); return; }
+    setCvFile(f); setCvError("");
+  }
+
+  async function handleSend() {
+    if (sending) return; // anti double-submit
+    setSending(true);
+    setStep("sending");
+
+    try {
+      // Upload CV lên backend, backend sẽ relay lên Drive + gửi mail + ghi sheet
+      const fd = new FormData();
+      fd.append("cv", cvFile);
+      fd.append("jobId", job.jobId);
+      fd.append("jobTitle", job["Vị Trí"] || "");
+      fd.append("companyName", job["Tên Công Ty"] || "");
+      fd.append("recruiterEmail", job["Email"] || "");
+      fd.append("subject", subject);
+      fd.append("body", body);
+      fd.append("candidateName", profile.fullName);
+      fd.append("candidateEmail", profile.email);
+      fd.append("candidatePhone", profile.phone || "");
+
+      const res = await fetch(APPLY_API, { method: "POST", body: fd });
+      const json = await res.json();
+
+      if (!res.ok || json.error) throw new Error(json.error?.message || "Gửi thất bại");
+
+      markApplied(job.jobId);
+      setStep("success");
+      setTimeout(() => { onSuccess(job.jobId); onClose(); }, 2200);
+    } catch(e) {
+      setErrorMsg(e.message || "Có lỗi xảy ra, thử lại sau.");
+      setStep("error");
+      setSending(false);
+    }
+  }
+
+  function tryClose() {
+    if (step === "compose" && dirty) {
+      if (!window.confirm("Bạn đang soạn email, thoát sẽ mất nội dung. Xác nhận?")) return;
+    }
+    onClose();
+  }
+
+  const overlayStyle = {
+    position:"fixed",inset:0,zIndex:400,
+    background:"rgba(40,32,15,0.6)",
+    backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",
+    display:"flex",alignItems:isMobile?"flex-end":"center",
+    justifyContent:"center",
+    animation:"overlayIn 0.2s ease",
+  };
+  const sheetStyle = {
+    background:"var(--bg)",
+    width: isMobile ? "100%" : "min(92vw,560px)",
+    maxHeight: isMobile ? "92dvh" : "90vh",
+    borderRadius: isMobile ? "20px 20px 0 0" : "12px",
+    overflowY:"auto",
+    animation: isMobile ? "sheetUp 0.32s cubic-bezier(0.16,1,0.3,1)" : "modalIn 0.28s cubic-bezier(0.16,1,0.3,1)",
+    display:"flex",flexDirection:"column",
+  };
+
+  const inp = (val, onChange, placeholder, err) => (
+    <div style={{marginBottom:14}}>
+      <input
+        value={val} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width:"100%",padding:"12px 14px",border:`1.5px solid ${err?"var(--red)":"var(--border)"}`,
+          borderRadius:6,fontSize:14,fontFamily:"'Jost',sans-serif",color:"var(--ink)",
+          background:"white",outline:"none",boxSizing:"border-box",
+        }}
+      />
+      {err && <p style={{fontSize:11,color:"var(--red)",marginTop:4,fontFamily:"Inconsolata,monospace"}}>{err}</p>}
+    </div>
+  );
+
+  return (
+    <div style={overlayStyle} onClick={e => e.target===e.currentTarget && tryClose()}>
+      <div style={sheetStyle}>
+        {isMobile && <div style={{width:36,height:4,background:"var(--border)",borderRadius:2,margin:"12px auto 4px",flexShrink:0}} />}
+
+        {/* Header */}
+        <div style={{padding:"20px 24px 16px",borderBottom:"1px solid var(--border)",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <p style={{fontFamily:"Inconsolata,monospace",fontSize:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.18em",color:"var(--acc)",marginBottom:3}}>
+                Quick Apply
+              </p>
+              <h3 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,color:"var(--ink)",lineHeight:1.2}}>
+                {job["Vị Trí"]}
+              </h3>
+              <p style={{fontSize:13,color:"var(--ink3)",marginTop:2}}>@ {job["Tên Công Ty"]}</p>
+            </div>
+            <button onClick={tryClose} style={{width:32,height:32,borderRadius:"50%",border:"1.5px solid var(--border)",background:"white",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--ink2)",flexShrink:0}}>✕</button>
+          </div>
+          {/* Step indicator */}
+          {(step === "profile" || step === "compose" || step === "preview") && (
+            <div style={{display:"flex",gap:6,marginTop:14,alignItems:"center"}}>
+              {["profile","compose","preview"].map((s,i) => (
+                <React.Fragment key={s}>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <div style={{
+                      width:22,height:22,borderRadius:"50%",fontSize:10,fontWeight:700,
+                      fontFamily:"Inconsolata,monospace",display:"flex",alignItems:"center",justifyContent:"center",
+                      background:step===s?"var(--ink)":(["profile","compose","preview"].indexOf(step)>i?"var(--green)":"var(--bg3)"),
+                      color:step===s||["profile","compose","preview"].indexOf(step)>i?"white":"var(--ink3)",
+                    }}>{i+1}</div>
+                    <span style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:step===s?"var(--ink)":"var(--ink3)",fontWeight:step===s?700:400}}>
+                      {s==="profile"?"Hồ sơ":s==="compose"?"Email":"Xem lại"}
+                    </span>
+                  </div>
+                  {i<2 && <div style={{flex:1,height:1,background:"var(--border)"}} />}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* STEP: profile */}
+        {step === "profile" && (
+          <div style={{padding:"20px 24px 24px",flex:1}}>
+            <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:16}}>Thông tin ứng viên</p>
+            {inp(profile.fullName, v => setProfile(p=>({...p,fullName:v})), "Họ và tên *", profileErrors.fullName)}
+            {inp(profile.email,    v => setProfile(p=>({...p,email:v})),    "Email của bạn *", profileErrors.email)}
+            {inp(profile.phone,    v => setProfile(p=>({...p,phone:v})),    "Số điện thoại")}
+            {inp(profile.portfolioUrl, v => setProfile(p=>({...p,portfolioUrl:v})), "Portfolio URL (không bắt buộc)")}
+            {inp(profile.linkedinUrl,  v => setProfile(p=>({...p,linkedinUrl:v})),  "LinkedIn URL (không bắt buộc)")}
+            <div style={{marginBottom:14}}>
+              <textarea
+                value={profile.defaultNote}
+                onChange={e => setProfile(p=>({...p,defaultNote:e.target.value}))}
+                placeholder="Giới thiệu ngắn (sẽ được chèn vào email)"
+                rows={3}
+                style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:14,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",resize:"vertical",boxSizing:"border-box"}}
+              />
+            </div>
+
+            {/* CV Upload */}
+            <div style={{marginBottom:20}}>
+              <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:10}}>CV của bạn *</p>
+              <div
+                onClick={() => fileRef.current?.click()}
+                style={{
+                  border:`2px dashed ${cvError?"var(--red)":cvFile?"var(--green)":"var(--border)"}`,
+                  borderRadius:8,padding:"18px 20px",cursor:"pointer",textAlign:"center",
+                  background:cvFile?"#F0F8EC":"white",transition:"all 0.2s ease",
+                }}
+              >
+                <input ref={fileRef} type="file" accept="application/pdf" onChange={handleCvChange} style={{display:"none"}} />
+                {cvFile ? (
+                  <div>
+                    <div style={{fontSize:20,marginBottom:4}}>📄</div>
+                    <p style={{fontSize:13,fontWeight:700,color:"var(--green)"}}>{cvFile.name}</p>
+                    <p style={{fontSize:11,color:"var(--ink3)",marginTop:2}}>{(cvFile.size/1024/1024).toFixed(1)} MB · Nhấn để đổi</p>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{fontSize:28,marginBottom:6,opacity:0.4}}>📎</div>
+                    <p style={{fontSize:13,fontWeight:600,color:"var(--ink2)"}}>Chọn file CV</p>
+                    <p style={{fontSize:11,color:"var(--ink3)",marginTop:2}}>PDF · Tối đa 5MB</p>
+                  </div>
+                )}
+              </div>
+              {cvError && <p style={{fontSize:11,color:"var(--red)",marginTop:4,fontFamily:"Inconsolata,monospace"}}>{cvError}</p>}
+            </div>
+
+            <button className="apply-btn" onClick={goToCompose}>Tiếp theo → Soạn email</button>
+          </div>
+        )}
+
+        {/* STEP: compose */}
+        {step === "compose" && (
+          <div style={{padding:"20px 24px 24px",flex:1}}>
+            <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:16}}>Soạn email ứng tuyển</p>
+
+            <div style={{marginBottom:12}}>
+              <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Gửi tới</p>
+              <div style={{padding:"10px 14px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:6,fontSize:13,color:"var(--ink2)",fontFamily:"Inconsolata,monospace"}}>
+                {job["Email"]}
+              </div>
+            </div>
+
+            <div style={{marginBottom:12}}>
+              <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Tiêu đề *</p>
+              <input
+                value={subject}
+                onChange={e => { setSubject(e.target.value); setDirty(true); }}
+                style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:14,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",boxSizing:"border-box"}}
+              />
+            </div>
+
+            <div style={{marginBottom:20}}>
+              <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Nội dung *</p>
+              <textarea
+                value={body}
+                onChange={e => { setBody(e.target.value); setDirty(true); }}
+                rows={10}
+                style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:13,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",resize:"vertical",lineHeight:1.7,boxSizing:"border-box"}}
+              />
+            </div>
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={() => setStep("profile")} style={{flex:1,padding:"14px",border:"1.5px solid var(--border)",borderRadius:6,background:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Jost',sans-serif",color:"var(--ink2)"}}>← Quay lại</button>
+              <button className="apply-btn" style={{flex:2}} onClick={() => setStep("preview")}>Xem trước →</button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP: preview */}
+        {step === "preview" && (
+          <div style={{padding:"20px 24px 24px",flex:1}}>
+            <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:16}}>Xem lại trước khi gửi</p>
+
+            <div style={{background:"white",border:"1.5px solid var(--border)",borderRadius:8,padding:"18px 20px",marginBottom:16,fontSize:13,lineHeight:1.7}}>
+              <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase"}}>Tới:</span>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:700,color:"var(--ink)"}}>{job["Email"]}</span>
+              </div>
+              <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase"}}>Tiêu đề:</span>
+                <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:700,color:"var(--ink)"}}>{subject}</span>
+              </div>
+              <div style={{height:1,background:"var(--border)",marginBottom:12}} />
+              <p style={{whiteSpace:"pre-line",color:"var(--ink2)",fontSize:13}}>{body}</p>
+            </div>
+
+            {cvFile && (
+              <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#F0F8EC",border:"1px solid #A8D8A8",borderRadius:6,padding:"8px 14px",marginBottom:20,fontSize:12,color:"var(--green)"}}>
+                📎 {cvFile.name} · {(cvFile.size/1024/1024).toFixed(1)} MB
+              </div>
+            )}
+
+            <div style={{background:"#FFF8F0",border:"1.5px solid #E8C9A0",borderRadius:6,padding:"12px 16px",marginBottom:20,fontSize:12,color:"var(--ink2)",lineHeight:1.6}}>
+              ⚠️ Email sẽ được gửi từ hệ thống DaNangEcom với reply-to là địa chỉ email của bạn. Nhà tuyển dụng trả lời sẽ đến thẳng hộp thư của bạn.
+            </div>
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={() => setStep("compose")} style={{flex:1,padding:"14px",border:"1.5px solid var(--border)",borderRadius:6,background:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Jost',sans-serif",color:"var(--ink2)"}}>← Sửa lại</button>
+              <button className="apply-btn" style={{flex:2}} onClick={handleSend} disabled={sending}>
+                {sending ? "Đang gửi..." : "Gửi ngay ✉️"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP: sending */}
+        {step === "sending" && (
+          <div style={{padding:"60px 24px",textAlign:"center",flex:1}}>
+            <div style={{fontSize:44,marginBottom:16,animation:"spin 1.2s linear infinite",display:"inline-block"}}>📤</div>
+            <p style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,color:"var(--ink)"}}>Đang gửi...</p>
+            <p style={{fontSize:13,color:"var(--ink3)",marginTop:8}}>Đang upload CV và gửi email đến nhà tuyển dụng</p>
+          </div>
+        )}
+
+        {/* STEP: success */}
+        {step === "success" && (
+          <div style={{padding:"60px 24px",textAlign:"center",flex:1}}>
+            <div style={{fontSize:52,marginBottom:16}}>🎉</div>
+            <p style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700,color:"var(--green)"}}>Đã gửi thành công!</p>
+            <p style={{fontSize:14,color:"var(--ink2)",marginTop:8,lineHeight:1.6}}>Email ứng tuyển đã được gửi đến<br/><strong>{job["Email"]}</strong></p>
+            <p style={{fontSize:12,color:"var(--ink3)",marginTop:10}}>Nhà tuyển dụng sẽ trả lời vào email của bạn.</p>
+          </div>
+        )}
+
+        {/* STEP: error */}
+        {step === "error" && (
+          <div style={{padding:"40px 24px 28px",flex:1}}>
+            <div style={{textAlign:"center",marginBottom:24}}>
+              <div style={{fontSize:44,marginBottom:12}}>⚠️</div>
+              <p style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,color:"var(--red)"}}>Gửi thất bại</p>
+              <p style={{fontSize:13,color:"var(--ink2)",marginTop:8,lineHeight:1.6}}>{errorMsg}</p>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={onClose} style={{flex:1,padding:"14px",border:"1.5px solid var(--border)",borderRadius:6,background:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Jost',sans-serif",color:"var(--ink2)"}}>Đóng</button>
+              <button className="apply-btn" style={{flex:2}} onClick={() => { setStep("preview"); setSending(false); }}>Thử lại →</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -239,24 +608,29 @@ export default function JobDiscovery() {
   const [search, setSearch]     = useState("");
   const [salary, setSalary]     = useState([0, 50]);
   const [opts, setOpts]         = useState({ areas:[], districts:[], levels:[], workModes:[] });
-  // ← FIX: thêm workModes vào filters state
   const [filters, setFilters]   = useState({ preset:"All", areas:[], districts:[], levels:[], workModes:[] });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
+  // Quick Apply state
+  const [applyJob, setApplyJob]   = useState(null);  // job đang apply
+  const [appliedIds, setAppliedIds] = useState(() => {
+    try { return Object.keys(JSON.parse(localStorage.getItem(APPLIED_KEY) || "{}")); } catch { return []; }
+  });
+
   useEffect(() => {
-    if (isMobile && (selected || drawerOpen)) {
+    if (isMobile && (selected || drawerOpen || applyJob)) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
     }
     return () => { document.body.style.overflow = ""; };
-  }, [isMobile, selected, drawerOpen]);
+  }, [isMobile, selected, drawerOpen, applyJob]);
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch("https://api.steinhq.com/v1/storages/69b224fbaffba40a625db5bd/Jobs");
+        const r = await fetch(`${SHEET_API}/Jobs`);
         const data = await r.json();
         const norm = data
           .map(j => normalizeJob(j, data))
@@ -288,13 +662,11 @@ export default function JobDiscovery() {
     if (filters.areas.length      && !filters.areas.includes(j.area))          return false;
     if (filters.districts.length  && !filters.districts.includes(j.district))  return false;
     if (filters.levels.length     && !filters.levels.includes(j["Level"]))     return false;
-    // ← FIX: filter workModes
     if (filters.workModes.length  && !filters.workModes.includes(j.workMode))  return false;
     if (j.salaryMax > 0 && (j.salaryMax < salary[0]*1_000_000 || j.salaryMax > salary[1]*1_000_000)) return false;
     const p = filters.preset;
     if (p === "New"        && j.freshnessStatus !== "new")                      return false;
     if (p === "HighSalary" && j.salaryMax < 15_000_000)                         return false;
-    // ← FIX: Remote preset dùng j.isRemote thay vì j.area === "Remote"
     if (p === "Remote"     && !j.isRemote)                                      return false;
     if (p === "POD"        && !(j["Vị Trí"]||"").toUpperCase().includes("POD")) return false;
     if (p === "EasyApply"  && (!j["Email"] || j["Email"] === "Không rõ"))       return false;
@@ -313,15 +685,21 @@ export default function JobDiscovery() {
   const topSalary  = useMemo(() => [...processed].sort((a,b) => b.salaryMax - a.salaryMax).filter(j => j.salaryMax > 0).slice(0,8), [processed]);
   const podJobs    = useMemo(() => processed.filter(j => (j["Vị Trí"]||"").toUpperCase().includes("POD")).slice(0,8), [processed]);
   const central    = useMemo(() => processed.filter(j => j.area === "Central").slice(0,8), [processed]);
-  // ← NEW: shelf riêng cho remote
   const remoteJobs = useMemo(() => processed.filter(j => j.isRemote).slice(0,8), [processed]);
 
   const todayN  = jobs.filter(j => j.daysOld <= 1).length;
-  const verN    = jobs.filter(j => j.isVerified).length;
   const emailN  = jobs.filter(j => j["Email"] && j["Email"] !== "Không rõ").length;
-  const remoteN = jobs.filter(j => j.isRemote).length;  // ← NEW stat
+  const remoteN = jobs.filter(j => j.isRemote).length;
 
   const P = isMobile ? "16px" : "32px";
+
+  // Callback khi apply thành công
+  const handleApplySuccess = useCallback((jobId) => {
+    setAppliedIds(prev => [...prev, jobId]);
+    setApplyJob(null);
+    // Cập nhật lại job trong danh sách nếu đang xem
+    if (selected?.jobId === jobId) setSelected(prev => prev ? {...prev, _applied: true} : null);
+  }, [selected]);
 
   if (loading) return (
     <div style={{background:"#F4EFE8",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -340,8 +718,6 @@ export default function JobDiscovery() {
       {/* ══════════ HEADER ══════════ */}
       <header style={{background:"rgba(255,252,248,0.88)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:"1.5px solid var(--border)",boxShadow:"0 2px 16px rgba(40,32,15,0.06)",position:"relative",zIndex:10}}>
         <div style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"14px":"24px"} ${P}`}}>
-
-          {/* Row A */}
           <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
             {/* Brand */}
             <div style={{flexShrink:0,paddingRight:isMobile?0:20,borderRight:isMobile?"none":"1.5px solid var(--border)"}}>
@@ -362,13 +738,13 @@ export default function JobDiscovery() {
               {search && <button className="search-clear" onClick={() => setSearch("")}>✕</button>}
             </div>
 
-            {/* Stats — desktop: thêm Remote stat */}
+            {/* Stats desktop */}
             {!isMobile && (
               <div style={{display:"flex",gap:24,flexShrink:0,paddingLeft:20,borderLeft:"1.5px solid var(--border)"}}>
                 {[
                   {v:jobs.length, l:"Active",   c:"var(--ink)"},
                   {v:todayN,      l:"Hôm nay",  c:"var(--green)"},
-                  {v:remoteN,     l:"Remote",   c:"var(--acc)"},   // ← REPLACED verN với remoteN
+                  {v:remoteN,     l:"Remote",   c:"var(--acc)"},
                   {v:emailN,      l:"Có Email", c:"var(--ink)"},
                 ].map(({v,l,c}) => (
                   <div key={l} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -391,12 +767,10 @@ export default function JobDiscovery() {
             )}
           </div>
 
-          {/* Filter panel — collapsible desktop */}
+          {/* Filter panel collapsible desktop */}
           {!isMobile && (
             <div style={{maxHeight:filtersOpen?"600px":"0px",opacity:filtersOpen?1:0,overflow:"hidden",transition:"max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease"}}>
               <div style={{borderTop:"1px solid var(--border)",paddingTop:18,marginTop:16,display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-start"}}>
-
-                {/* Preset chips */}
                 <div style={{display:"flex",flexDirection:"column",gap:10,flexShrink:0}}>
                   <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.18em",color:"var(--ink3)"}}>Quick</span>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -414,10 +788,7 @@ export default function JobDiscovery() {
                     ))}
                   </div>
                 </div>
-
                 <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-
-                {/* ← NEW: Work Mode filter */}
                 {opts.workModes.length > 0 && (
                   <FilterBlock label="Hình thức">
                     {opts.workModes.map(m => (
@@ -427,9 +798,7 @@ export default function JobDiscovery() {
                     ))}
                   </FilterBlock>
                 )}
-
                 <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-
                 {opts.areas.length > 0 && (
                   <FilterBlock label="Khu vực">
                     {opts.areas.map(a => (
@@ -439,35 +808,24 @@ export default function JobDiscovery() {
                     ))}
                   </FilterBlock>
                 )}
-
                 <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-
                 {opts.districts.length > 0 && (
                   <FilterBlock label="Quận">
                     {opts.districts.map(d => (
-                      <button key={d} className={`fpill${filters.districts.includes(d)?" on":""}`} onClick={() => toggle("districts",d)}>
-                        {d}
-                      </button>
+                      <button key={d} className={`fpill${filters.districts.includes(d)?" on":""}`} onClick={() => toggle("districts",d)}>{d}</button>
                     ))}
                   </FilterBlock>
                 )}
-
                 <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-
                 {opts.levels.length > 0 && (
                   <FilterBlock label="Level">
                     {opts.levels.map(l => (
-                      <button key={l} className={`fpill${filters.levels.includes(l)?" on":""}`} onClick={() => toggle("levels",l)}>
-                        {l}
-                      </button>
+                      <button key={l} className={`fpill${filters.levels.includes(l)?" on":""}`} onClick={() => toggle("levels",l)}>{l}</button>
                     ))}
                   </FilterBlock>
                 )}
-
                 <div style={{width:1,background:"var(--border)",alignSelf:"stretch"}} />
-
                 <SalaryFilter salary={salary} setSalary={setSalary} />
-
                 {isFiltering && (
                   <button onClick={reset} className="reset-btn" style={{alignSelf:"flex-end"}}>✕ Reset</button>
                 )}
@@ -475,7 +833,7 @@ export default function JobDiscovery() {
             </div>
           )}
 
-          {/* Active filter summary chips (desktop, panel closed) */}
+          {/* Active filter chips desktop collapsed */}
           {!isMobile && !filtersOpen && activeCount > 0 && (
             <div style={{display:"flex",alignItems:"center",gap:6,marginTop:12,flexWrap:"wrap"}}>
               <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Lọc:</span>
@@ -494,8 +852,6 @@ export default function JobDiscovery() {
 
       {/* ══════════ MAIN ══════════ */}
       <main style={{maxWidth:1440,margin:"0 auto",padding:`${isMobile?"20px":"40px"} ${P} ${isMobile?"100px":"80px"}`,position:"relative",zIndex:1}}>
-
-        {/* Mobile: filter summary */}
         {isMobile && isFiltering && (
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
             <span style={{fontFamily:"Inconsolata,monospace",fontSize:12,color:"var(--ink3)"}}>{processed.length} kết quả</span>
@@ -511,21 +867,20 @@ export default function JobDiscovery() {
             <SectionHead icon="🔍" title={isMobile?"Kết Quả":"Kết Quả Tìm Kiếm"} sub={`${processed.length} vị trí phù hợp`} isMobile={isMobile} />
             {processed.length === 0
               ? <Empty onReset={reset} />
-              : <div className="card-grid">{processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} isMobile={isMobile} idx={i} />)}</div>
+              : <div className="card-grid">{processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} onQuickApply={() => setApplyJob(j)} appliedIds={appliedIds} isMobile={isMobile} idx={i} />)}</div>
             }
           </section>
         ) : (
           <>
-            {newJobs.length > 0    && <Shelf icon="🕐" title="Job Mới Nhất"     sub={`${newJobs.length} vị trí trong 3 ngày qua`}     jobs={newJobs}    onSel={setSelected} isMobile={isMobile} />}
-            {topSalary.length > 0  && <Shelf icon="💰" title="Top Lương Cao"    sub="Sắp xếp theo lương cao nhất"                     jobs={topSalary}  onSel={setSelected} isMobile={isMobile} />}
-            {/* ← NEW: Remote shelf chỉ hiện khi có job remote */}
-            {remoteJobs.length > 0 && <Shelf icon="💻" title="Làm Việc Remote"  sub={`${remoteJobs.length} vị trí work from anywhere`} jobs={remoteJobs} onSel={setSelected} isMobile={isMobile} />}
-            {podJobs.length > 0    && <Shelf icon="🚀" title="POD & E-Commerce" sub="Niche tăng trưởng — Thị trường quốc tế"          jobs={podJobs}    onSel={setSelected} isMobile={isMobile} />}
-            {central.length > 0    && <Shelf icon="📍" title="Khu Trung Tâm"    sub="Hải Châu · Thanh Khê — Dễ đi làm"               jobs={central}    onSel={setSelected} isMobile={isMobile} />}
+            {newJobs.length > 0    && <Shelf icon="🕐" title="Job Mới Nhất"     sub={`${newJobs.length} vị trí trong 3 ngày qua`}     jobs={newJobs}    onSel={setSelected} onQuickApply={setApplyJob} appliedIds={appliedIds} isMobile={isMobile} />}
+            {topSalary.length > 0  && <Shelf icon="💰" title="Top Lương Cao"    sub="Sắp xếp theo lương cao nhất"                     jobs={topSalary}  onSel={setSelected} onQuickApply={setApplyJob} appliedIds={appliedIds} isMobile={isMobile} />}
+            {remoteJobs.length > 0 && <Shelf icon="💻" title="Làm Việc Remote"  sub={`${remoteJobs.length} vị trí work from anywhere`} jobs={remoteJobs} onSel={setSelected} onQuickApply={setApplyJob} appliedIds={appliedIds} isMobile={isMobile} />}
+            {podJobs.length > 0    && <Shelf icon="🚀" title="POD & E-Commerce" sub="Niche tăng trưởng — Thị trường quốc tế"          jobs={podJobs}    onSel={setSelected} onQuickApply={setApplyJob} appliedIds={appliedIds} isMobile={isMobile} />}
+            {central.length > 0    && <Shelf icon="📍" title="Khu Trung Tâm"    sub="Hải Châu · Thanh Khê — Dễ đi làm"               jobs={central}    onSel={setSelected} onQuickApply={setApplyJob} appliedIds={appliedIds} isMobile={isMobile} />}
             <section style={{marginTop:isMobile?32:56}}>
               <SectionHead icon="📋" title="Tất Cả Cơ Hội" sub={`${processed.length} vị trí · Điểm cao nhất lên đầu`} isMobile={isMobile} />
               <div className="card-grid">
-                {processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} isMobile={isMobile} idx={i} />)}
+                {processed.map((j,i) => <JobCard key={i} job={j} onClick={() => setSelected(j)} onQuickApply={() => setApplyJob(j)} appliedIds={appliedIds} isMobile={isMobile} idx={i} />)}
               </div>
             </section>
           </>
@@ -551,7 +906,24 @@ export default function JobDiscovery() {
       )}
 
       {/* Detail Panel */}
-      {selected && <DetailPanel job={selected} onClose={() => setSelected(null)} isMobile={isMobile} />}
+      {selected && (
+        <DetailPanel
+          job={selected}
+          onClose={() => setSelected(null)}
+          isMobile={isMobile}
+          onQuickApply={() => setApplyJob(selected)}
+          appliedIds={appliedIds}
+        />
+      )}
+
+      {/* Quick Apply Modal */}
+      {applyJob && (
+        <QuickApplyModal
+          job={applyJob}
+          onClose={() => setApplyJob(null)}
+          onSuccess={handleApplySuccess}
+        />
+      )}
     </div>
   );
 }
@@ -689,6 +1061,7 @@ const CSS = `
     flex-direction:column; animation:slideIn 0.32s cubic-bezier(0.16,1,0.3,1);
   }
   @keyframes slideIn { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.95) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
   @media(max-width:767px) {
     .overlay { align-items:flex-end; justify-content:center; }
     .panel { width:100% !important; height:92dvh !important; border-radius:20px 20px 0 0; animation:slideUp 0.35s cubic-bezier(0.16,1,0.3,1); }
@@ -732,8 +1105,21 @@ const CSS = `
     border:none; cursor:pointer; border-radius:6px; font-family:'Jost',sans-serif;
     -webkit-tap-highlight-color:transparent;
   }
-  .apply-btn:hover { background:var(--acc); transform:translateY(-1px); box-shadow:0 6px 20px rgba(184,98,26,0.3); }
+  .apply-btn:hover:not(:disabled) { background:var(--acc); transform:translateY(-1px); box-shadow:0 6px 20px rgba(184,98,26,0.3); }
+  .apply-btn:disabled { opacity:0.6; cursor:not-allowed; }
   @media(max-width:767px) { .apply-btn { padding:20px; font-size:17px; border-radius:10px; } }
+
+  .quick-apply-btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:10px 18px; background:var(--acc); color:white;
+    font-weight:700; font-size:13px; letter-spacing:0.06em; text-transform:uppercase;
+    border:none; cursor:pointer; border-radius:6px; font-family:'Jost',sans-serif;
+    transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+    -webkit-tap-highlight-color:transparent; flex-shrink:0;
+  }
+  .quick-apply-btn:hover { background:#9A4E10; transform:translateY(-1px); box-shadow:0 4px 14px rgba(184,98,26,0.35); }
+  .quick-apply-btn:active { transform:scale(0.97); }
+  .quick-apply-btn.applied { background:var(--green); cursor:default; pointer-events:none; }
 
   /* Work mode badge */
   .work-badge-remote  { background:#E8F3FC; color:#1A5A8A; border:1px solid #9ECEF5; }
@@ -819,7 +1205,6 @@ function Tag({ name }) {
   );
 }
 
-// ← NEW: WorkModeBadge hiển thị trên card
 function WorkModeBadge({ mode }) {
   const cls = mode === "Remote" ? "work-badge-remote" : mode === "Hybrid" ? "work-badge-hybrid" : "work-badge-onsite";
   const icon = mode === "Remote" ? "💻" : mode === "Hybrid" ? "🔀" : "🏢";
@@ -830,10 +1215,35 @@ function WorkModeBadge({ mode }) {
   );
 }
 
+// Quick Apply Button — hiển thị trạng thái applied / eligible / external
+function QuickApplyButton({ job, appliedIds, onQuickApply, size = "normal" }) {
+  const isApplied = appliedIds.includes(job.jobId);
+  const eligible  = job.applyEligibility === "quick_apply_available";
+  const pad = size === "small" ? "8px 14px" : "10px 18px";
+  const fz  = size === "small" ? 12 : 13;
+
+  if (isApplied) {
+    return (
+      <span className="quick-apply-btn applied" style={{padding:pad,fontSize:fz}}>
+        ✓ Đã apply
+      </span>
+    );
+  }
+  if (eligible) {
+    return (
+      <button className="quick-apply-btn" style={{padding:pad,fontSize:fz}}
+        onClick={e => { e.stopPropagation(); onQuickApply(job); }}>
+        ✉ Apply nhanh
+      </button>
+    );
+  }
+  return null; // external only hoặc unavailable → không hiện nút
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHELF
 // ─────────────────────────────────────────────────────────────
-function Shelf({ icon, title, sub, jobs, onSel, isMobile }) {
+function Shelf({ icon, title, sub, jobs, onSel, onQuickApply, appliedIds, isMobile }) {
   const [page, setPage] = useState(0);
   const PER = isMobile ? 2 : 3;
   const total = Math.ceil(jobs.length / PER);
@@ -844,7 +1254,7 @@ function Shelf({ icon, title, sub, jobs, onSel, isMobile }) {
       <div className="srow" style={{"--cols": PER}}>
         {visible.map((j,i) => (
           <div key={`${page}-${i}`} style={{height:"100%"}}>
-            <JobCard job={j} onClick={() => onSel(j)} isMobile={isMobile} idx={i} />
+            <JobCard job={j} onClick={() => onSel(j)} onQuickApply={onQuickApply} appliedIds={appliedIds} isMobile={isMobile} idx={i} />
           </div>
         ))}
         {Array.from({length: PER - visible.length}).map((_,i) => <div key={`e${i}`} />)}
@@ -861,22 +1271,24 @@ function Shelf({ icon, title, sub, jobs, onSel, isMobile }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// JOB CARD — thêm WorkModeBadge
+// JOB CARD
 // ─────────────────────────────────────────────────────────────
-function JobCard({ job, onClick, isMobile, idx = 0 }) {
+function JobCard({ job, onClick, onQuickApply, appliedIds, isMobile, idx = 0 }) {
   const { salaryMax:sMax, salaryMin:sMin } = job;
   const salLabel = sMax
     ? (sMin && sMin !== sMax ? `${Math.round(sMin/1_000_000)}M – ${Math.round(sMax/1_000_000)}M` : `${Math.round(sMax/1_000_000)}M`)
     : "Cạnh tranh";
   const freshLabel = job.daysOld===0?"Hôm nay":job.daysOld===1?"Hôm qua":job.daysOld<99?`${job.daysOld}n`:"";
   const pad = isMobile ? "14px 16px 0" : "20px 22px 0";
+  const eligible = job.applyEligibility === "quick_apply_available";
+  const isApplied = appliedIds.includes(job.jobId);
+
   return (
     <div className="jcard" onClick={onClick} style={{height:"100%",animationDelay:`${Math.min(idx*0.04,0.3)}s`}}>
       <div style={{padding:pad}}>
         {/* Tags row */}
         <div style={{display:"flex",gap:5,flexWrap:"wrap",minHeight:22,marginBottom:10}}>
           {job.tags.slice(0,3).map(t => <Tag key={t} name={t} />)}
-          {/* ← NEW: WorkMode badge kế tags */}
           <WorkModeBadge mode={job.workMode} />
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -910,9 +1322,17 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
       <div style={{flex:1}} />
       <div style={{padding:isMobile?"0 16px 16px":"0 22px 20px",marginTop:4}}>
         <div style={{borderTop:"1px solid var(--border)",paddingTop:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:11,color:"var(--ink3)",fontFamily:"Inconsolata,monospace"}}>Score {job.finalScore}</span>
-            <span style={{fontSize:13,fontWeight:700,color:"var(--acc)",letterSpacing:"0.04em"}}>Xem chi tiết →</span>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+            <span style={{fontSize:11,color:"var(--ink3)",fontFamily:"Inconsolata,monospace",flexShrink:0}}>Score {job.finalScore}</span>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              {(eligible || isApplied) && (
+                <QuickApplyButton
+                  job={job} appliedIds={appliedIds}
+                  onQuickApply={onQuickApply} size="small"
+                />
+              )}
+              <span style={{fontSize:13,fontWeight:700,color:"var(--acc)",letterSpacing:"0.04em",flexShrink:0}}>Xem →</span>
+            </div>
           </div>
         </div>
       </div>
@@ -921,9 +1341,9 @@ function JobCard({ job, onClick, isMobile, idx = 0 }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DETAIL PANEL — thêm Work Mode vào info grid
+// DETAIL PANEL
 // ─────────────────────────────────────────────────────────────
-function DetailPanel({ job, onClose, isMobile }) {
+function DetailPanel({ job, onClose, isMobile, onQuickApply, appliedIds }) {
   const [imgErr, setImgErr] = useState(false);
   const imgUrl = job["LINK ẢNH"];
   const grads = [
@@ -941,11 +1361,13 @@ function DetailPanel({ job, onClose, isMobile }) {
   const postedDate = rawDate ? (rawDate.split(" ")[1] || rawDate) : "";
   const freshLabel = job.daysOld===0?"hôm nay":job.daysOld===1?"hôm qua":job.daysOld<99?`${job.daysOld} ngày trước`:"";
 
-  // ← NEW: địa điểm hiển thị đúng cho remote job
   const _d = job.district && job.district !== "Không rõ" ? job.district : "";
   const _a = job.area && job.area !== "Không rõ" ? job.area : "";
   const _addr = job["Địa chỉ"] && job["Địa chỉ"] !== "Không rõ" ? job["Địa chỉ"] : "";
   const locationDisplay = job.isRemote ? "Làm việc từ xa" : _d ? (_a && _a !== _d ? `${_d}, ${_a}` : _d) : _addr || _a || "";
+
+  const isApplied = appliedIds.includes(job.jobId);
+  const eligible  = job.applyEligibility === "quick_apply_available";
 
   const ImageBlock = () => (
     imgUrl && !imgErr
@@ -968,7 +1390,6 @@ function DetailPanel({ job, onClose, isMobile }) {
       )}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:isMobile?14:20}}>
         {job.tags.map(t => <Tag key={t} name={t} />)}
-        {/* ← NEW: WorkMode badge trong detail */}
         <WorkModeBadge mode={job.workMode} />
         {job.isVerified && (
           <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 11px",fontSize:11,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",borderRadius:3,fontFamily:"Inconsolata,monospace",background:"#E8F3FC",color:"#1A5A8A",border:"1px solid #9ECEF5"}}>✓ Verified</span>
@@ -984,13 +1405,14 @@ function DetailPanel({ job, onClose, isMobile }) {
         </div>
       )}
       <div style={{height:1,background:"var(--border)",marginBottom:isMobile?18:28}} />
-      {/* ← FIX: info grid — Platform thay bằng Work Mode */}
+
+      {/* Info grid */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:isMobile?10:14,marginBottom:isMobile?22:32}}>
         {[
           {l:"Mức lương", v:salLabel,               a:"var(--acc)"},
           {l:"Địa điểm",  v:locationDisplay,         a:"var(--green)"},
           {l:"Level",     v:job["Level"]||"—",       a:"var(--ink2)"},
-          {l:"Hình thức", v:job.workMode||"—",       a:job.isRemote?"var(--blue)":"var(--ink2)"},  // ← NEW
+          {l:"Hình thức", v:job.workMode||"—",       a:job.isRemote?"var(--blue)":"var(--ink2)"},
         ].map(({l,v,a}) => (
           <div key={l} style={{background:"white",border:"1.5px solid var(--border)",borderRadius:6,padding:isMobile?"12px 14px":"16px 18px"}}>
             <div style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:a,opacity:0.85,marginBottom:5}}>{l}</div>
@@ -998,7 +1420,8 @@ function DetailPanel({ job, onClose, isMobile }) {
           </div>
         ))}
       </div>
-      {/* Platform nếu có */}
+
+      {/* Platform */}
       {job["Platform"] && job["Platform"] !== "Không rõ" && (
         <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFF8F0",border:"1px solid #E8C9A0",borderRadius:6,padding:"8px 14px",marginBottom:isMobile?14:20}}>
           <span style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--acc)"}}>Platform:</span>
@@ -1006,6 +1429,8 @@ function DetailPanel({ job, onClose, isMobile }) {
         </div>
       )}
       <div style={{height:1,background:"var(--border)",marginBottom:isMobile?18:28}} />
+
+      {/* Nội dung */}
       {job["Nội Dung Gốc"] && (
         <div style={{marginBottom:isMobile?18:28}}>
           <div style={{fontFamily:"Inconsolata,monospace",fontSize:12,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:12}}>Mô tả công việc</div>
@@ -1018,8 +1443,26 @@ function DetailPanel({ job, onClose, isMobile }) {
           <p style={{fontSize:isMobile?15:16,lineHeight:1.85,color:"var(--ink2)"}}>{job["Phúc Lợi"]}</p>
         </div>
       )}
-      <a href={job["LINK BÀI VIẾT"]} target="_blank" rel="noopener noreferrer" className="apply-btn">Apply Ngay →</a>
-      <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:8}}>
+
+      {/* Action buttons — Quick Apply + Apply gốc */}
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+        {(eligible || isApplied) && (
+          <QuickApplyButton
+            job={job} appliedIds={appliedIds}
+            onQuickApply={onQuickApply}
+          />
+        )}
+        {job["LINK BÀI VIẾT"] && (
+          <a href={job["LINK BÀI VIẾT"]} target="_blank" rel="noopener noreferrer"
+            style={{display:"block",width:"100%",padding:"14px",background:"white",border:"1.5px solid var(--border)",color:"var(--ink2)",fontWeight:700,fontSize:14,letterSpacing:"0.06em",textTransform:"uppercase",textAlign:"center",textDecoration:"none",borderRadius:6,fontFamily:"'Jost',sans-serif",boxSizing:"border-box",transition:"all 0.18s ease"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--acc)";e.currentTarget.style.color="var(--acc)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--ink2)";}}>
+            Xem bài gốc ↗
+          </a>
+        )}
+      </div>
+
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {job["Email"]&&job["Email"]!=="Không rõ" && <p style={{fontFamily:"Inconsolata,monospace",fontSize:isMobile?13:14,color:"var(--ink3)"}}>📧 {job["Email"]}</p>}
         {job["SĐT"]&&job["SĐT"]!=="Không rõ"     && <p style={{fontFamily:"Inconsolata,monospace",fontSize:isMobile?13:14,color:"var(--ink3)"}}>📞 {job["SĐT"]}</p>}
       </div>
@@ -1055,7 +1498,7 @@ function DetailPanel({ job, onClose, isMobile }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FILTER DRAWER (mobile) — thêm Work Mode section
+// FILTER DRAWER (mobile)
 // ─────────────────────────────────────────────────────────────
 function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, reset, processed, onClose }) {
   return (
@@ -1070,7 +1513,6 @@ function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, re
               <button onClick={onClose} style={{fontSize:13,fontWeight:700,color:"white",background:"var(--ink)",border:"none",borderRadius:4,padding:"7px 16px",cursor:"pointer",fontFamily:"'Jost',sans-serif"}}>Xong ✓</button>
             </div>
           </div>
-
           <DrawerBlock label="Quick filter">
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {[{k:"New",e:"🕐",l:"Mới nhất"},{k:"HighSalary",e:"💰",l:"Lương >15M"},{k:"Remote",e:"💻",l:"Remote"},{k:"POD",e:"🚀",l:"POD Only"},{k:"EasyApply",e:"🎯",l:"Easy Apply"}].map(({k,e,l}) => (
@@ -1078,8 +1520,6 @@ function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, re
               ))}
             </div>
           </DrawerBlock>
-
-          {/* ← NEW: Work Mode filter trong drawer */}
           {opts.workModes.length > 0 && (
             <DrawerBlock label="Hình thức làm việc">
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -1091,7 +1531,6 @@ function FilterDrawer({ opts, filters, salary, toggle, setFilters, setSalary, re
               </div>
             </DrawerBlock>
           )}
-
           {opts.areas.length > 0 && (
             <DrawerBlock label="Khu vực">
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
