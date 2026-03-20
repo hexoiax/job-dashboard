@@ -5,17 +5,17 @@ import { google } from "googleapis";
 import { Readable } from "stream";
 
 // ─── ENV ─────────────────────────────────────────────────────
-const MAIL_USER          = process.env.MAIL_USER!;
-const MAIL_PASS          = process.env.MAIL_PASS!;
-const DRIVE_CLIENT_ID    = process.env.DRIVE_CLIENT_ID!;
-const DRIVE_CLIENT_SECRET= process.env.DRIVE_CLIENT_SECRET!;
-const DRIVE_REFRESH_TOKEN= process.env.DRIVE_REFRESH_TOKEN!;
-const DRIVE_FOLDER_ID    = process.env.DRIVE_FOLDER_ID!;
-const SHEET_API          = process.env.SHEET_API!;
+const MAIL_USER           = process.env.MAIL_USER!;
+const MAIL_PASS           = process.env.MAIL_PASS!;
+const DRIVE_CLIENT_ID     = process.env.DRIVE_CLIENT_ID!;
+const DRIVE_CLIENT_SECRET = process.env.DRIVE_CLIENT_SECRET!;
+const DRIVE_REFRESH_TOKEN = process.env.DRIVE_REFRESH_TOKEN!;
+const DRIVE_FOLDER_ID     = process.env.DRIVE_FOLDER_ID!;
+const SHEET_API           = process.env.SHEET_API!;
 
-const MAX_CV_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_CV_SIZE = 5 * 1024 * 1024;
 
-// ─── DRIVE SERVICE ───────────────────────────────────────────
+// ─── DRIVE ───────────────────────────────────────────────────
 async function uploadCvToDrive(
   buffer: Buffer,
   fileName: string,
@@ -23,7 +23,6 @@ async function uploadCvToDrive(
 ): Promise<{ fileId: string; fileLink: string }> {
   const auth = new google.auth.OAuth2(DRIVE_CLIENT_ID, DRIVE_CLIENT_SECRET);
   auth.setCredentials({ refresh_token: DRIVE_REFRESH_TOKEN });
-
   const drive = google.drive({ version: "v3", auth });
 
   const readable = new Readable();
@@ -31,14 +30,8 @@ async function uploadCvToDrive(
   readable.push(null);
 
   const res = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: [DRIVE_FOLDER_ID],
-    },
-    media: {
-      mimeType,
-      body: readable,
-    },
+    requestBody: { name: fileName, parents: [DRIVE_FOLDER_ID] },
+    media: { mimeType, body: readable },
     fields: "id, webViewLink",
   });
 
@@ -48,34 +41,79 @@ async function uploadCvToDrive(
   };
 }
 
-// ─── SHEET SERVICE ────────────────────────────────────────────
+// ─── SHEET: Applications ──────────────────────────────────────
 async function writeApplicationToSheet(row: Record<string, string>) {
   const res = await fetch(`${SHEET_API}/Applications`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify([row]),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Sheet write failed: ${text}`);
+  if (!res.ok) throw new Error(`Sheet write failed: ${await res.text()}`);
+}
+
+// ─── SHEET: CandidateProfiles (upsert) ───────────────────────
+async function upsertCandidateProfile(profile: {
+  email: string;
+  fullName: string;
+  phone: string;
+  cvDriveLink: string;
+}) {
+  try {
+    const res = await fetch(`${SHEET_API}/CandidateProfiles`);
+    if (!res.ok) throw new Error("Cannot read CandidateProfiles");
+    const rows: Record<string, string>[] = await res.json();
+    const exists = rows.some(r => r.email === profile.email);
+
+    if (!exists) {
+      // Chưa có → tạo mới
+      await fetch(`${SHEET_API}/CandidateProfiles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([{
+          userId:          profile.email,
+          fullName:        profile.fullName,
+          email:           profile.email,
+          phone:           profile.phone,
+          lastCvDriveLink: profile.cvDriveLink,
+          defaultNote:     "",
+          portfolioUrl:    "",
+          linkedinUrl:     "",
+          updatedAt:       new Date().toISOString(),
+        }]),
+      });
+    } else {
+      // Đã có → cập nhật cv link + timestamp
+      await fetch(`${SHEET_API}/CandidateProfiles`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          condition: { email: profile.email },
+          set: {
+            lastCvDriveLink: profile.cvDriveLink,
+            updatedAt:       new Date().toISOString(),
+          },
+        }),
+      });
+    }
+  } catch (e: any) {
+    // best-effort — không block luồng chính
+    console.warn("[upsertCandidateProfile]", e.message);
   }
 }
 
-// ─── DEDUPE CHECK (đọc sheet, check userId+jobId) ─────────────
+// ─── DEDUPE ───────────────────────────────────────────────────
 async function checkDuplicate(jobId: string, candidateEmail: string): Promise<boolean> {
   try {
     const res = await fetch(`${SHEET_API}/Applications`);
     if (!res.ok) return false;
     const rows: Record<string, string>[] = await res.json();
-    return rows.some(
-      r => r.jobId === jobId && r.userEmail === candidateEmail
-    );
+    return rows.some(r => r.jobId === jobId && r.userEmail === candidateEmail);
   } catch {
-    return false; // nếu check lỗi thì cho qua, backend ghi sẽ tạo duplicate nhưng không block UX
+    return false;
   }
 }
 
-// ─── MAIL SERVICE ─────────────────────────────────────────────
+// ─── MAIL ─────────────────────────────────────────────────────
 async function sendMail(opts: {
   to: string;
   replyTo: string;
@@ -97,24 +135,21 @@ async function sendMail(opts: {
     replyTo: opts.replyTo,
     subject: opts.subject,
     text: opts.body,
-    attachments: [
-      {
-        filename: opts.cvFileName,
-        content: opts.cvBuffer,
-        contentType: "application/pdf",
-      },
-    ],
+    attachments: [{
+      filename: opts.cvFileName,
+      content: opts.cvBuffer,
+      contentType: "application/pdf",
+    }],
   });
 
   return info.messageId || "";
 }
 
-// ─── MAIN HANDLER ─────────────────────────────────────────────
+// ─── HANDLER ──────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
 
-    // Parse fields
     const cvFile         = formData.get("cv") as File | null;
     const jobId          = (formData.get("jobId") as string || "").trim();
     const jobTitle       = (formData.get("jobTitle") as string || "").trim();
@@ -126,43 +161,36 @@ export async function POST(req: NextRequest) {
     const candidateEmail = (formData.get("candidateEmail") as string || "").trim();
     const candidatePhone = (formData.get("candidatePhone") as string || "").trim();
 
-    // ── Validate ──────────────────────────────────────────────
+    // ── Validate ─────────────────────────────────────────────
     if (!cvFile)
       return NextResponse.json({ error: { code: "NO_CV", message: "Thiếu file CV" } }, { status: 400 });
-
     if (cvFile.type !== "application/pdf")
       return NextResponse.json({ error: { code: "INVALID_CV_TYPE", message: "Chỉ nhận PDF" } }, { status: 400 });
-
     if (cvFile.size > MAX_CV_SIZE)
       return NextResponse.json({ error: { code: "CV_TOO_LARGE", message: "CV tối đa 5MB" } }, { status: 400 });
-
     if (!recruiterEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recruiterEmail))
       return NextResponse.json({ error: { code: "INVALID_RECRUITER_EMAIL", message: "Email nhà tuyển dụng không hợp lệ" } }, { status: 400 });
-
     if (!candidateEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateEmail))
       return NextResponse.json({ error: { code: "INVALID_CANDIDATE_EMAIL", message: "Email ứng viên không hợp lệ" } }, { status: 400 });
-
     if (!subject || !body)
-      return NextResponse.json({ error: { code: "MISSING_CONTENT", message: "Thiếu tiêu đề hoặc nội dung email" } }, { status: 400 });
+      return NextResponse.json({ error: { code: "MISSING_CONTENT", message: "Thiếu tiêu đề hoặc nội dung" } }, { status: 400 });
 
-    // ── Dedupe check ──────────────────────────────────────────
+    // ── Dedupe ───────────────────────────────────────────────
     const isDuplicate = await checkDuplicate(jobId, candidateEmail);
     if (isDuplicate)
       return NextResponse.json({ error: { code: "DUPLICATE_APPLY", message: "Bạn đã ứng tuyển vị trí này rồi" } }, { status: 409 });
 
-    // ── Đọc CV buffer ─────────────────────────────────────────
+    // ── CV buffer ────────────────────────────────────────────
     const cvBuffer = Buffer.from(await cvFile.arrayBuffer());
     const timestamp = Date.now();
     const safeEmail = candidateEmail.replace(/[^a-z0-9]/gi, "_");
     const storedFileName = `${safeEmail}_${timestamp}_cv.pdf`;
 
-    // ── Upload Drive ──────────────────────────────────────────
-    let driveFileId = "";
-    let driveLink   = "";
+    // ── Upload Drive ─────────────────────────────────────────
+    let driveLink = "";
     try {
       const uploaded = await uploadCvToDrive(cvBuffer, storedFileName, "application/pdf");
-      driveFileId = uploaded.fileId;
-      driveLink   = uploaded.fileLink;
+      driveLink = uploaded.fileLink;
     } catch (e: any) {
       return NextResponse.json(
         { error: { code: "DRIVE_UPLOAD_FAILED", message: "Upload CV thất bại: " + e.message } },
@@ -170,36 +198,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Gửi mail ──────────────────────────────────────────────
+    // ── Gửi mail ─────────────────────────────────────────────
     let providerMessageId = "";
     try {
       providerMessageId = await sendMail({
         to: recruiterEmail,
         replyTo: candidateEmail,
-        subject,
-        body,
-        cvBuffer,
+        subject, body, cvBuffer,
         cvFileName: cvFile.name || storedFileName,
       });
     } catch (e: any) {
-      // Mail fail → ghi log vào sheet với status failed, không throw ra ngoài
       await writeApplicationToSheet({
-        applicationId:   `app_${timestamp}`,
-        jobId,
-        jobTitle,
-        companyName,
-        companyEmail:    recruiterEmail,
-        userEmail:       candidateEmail,
-        userFullName:    candidateName,
-        userPhone:       candidatePhone,
-        cvDriveLink:     driveLink,
-        subject,
-        bodySnapshot:    body,
-        status:          "failed",
+        applicationId: `app_${timestamp}`,
+        jobId, jobTitle, companyName,
+        companyEmail:  recruiterEmail,
+        userEmail:     candidateEmail,
+        userFullName:  candidateName,
+        userPhone:     candidatePhone,
+        cvDriveLink:   driveLink,
+        subject, bodySnapshot: body,
+        status:            "failed",
         providerMessageId: "",
-        errorReason:     e.message,
-        appliedAt:       new Date().toISOString(),
-      }).catch(() => {}); // best-effort
+        errorReason:       e.message,
+        appliedAt:         new Date().toISOString(),
+      }).catch(() => {});
 
       return NextResponse.json(
         { error: { code: "MAIL_SEND_FAILED", message: "Gửi email thất bại: " + e.message } },
@@ -207,24 +229,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Ghi Applications sheet (snapshot) ─────────────────────
+    // ── Ghi Applications snapshot ────────────────────────────
     const applicationId = `app_${timestamp}`;
     await writeApplicationToSheet({
       applicationId,
-      jobId,
-      jobTitle,
-      companyName,
-      companyEmail:      recruiterEmail,
-      userEmail:         candidateEmail,
-      userFullName:      candidateName,
-      userPhone:         candidatePhone,
-      cvDriveLink:       driveLink,
-      subject,
-      bodySnapshot:      body,
+      jobId, jobTitle, companyName,
+      companyEmail:  recruiterEmail,
+      userEmail:     candidateEmail,
+      userFullName:  candidateName,
+      userPhone:     candidatePhone,
+      cvDriveLink:   driveLink,
+      subject, bodySnapshot: body,
       status:            "sent",
       providerMessageId,
       errorReason:       "",
       appliedAt:         new Date().toISOString(),
+    });
+
+    // ── Upsert CandidateProfiles (best-effort) ────────────────
+    await upsertCandidateProfile({
+      email:       candidateEmail,
+      fullName:    candidateName,
+      phone:       candidatePhone,
+      cvDriveLink: driveLink,
     });
 
     return NextResponse.json({ success: true, applicationId, status: "sent" });
