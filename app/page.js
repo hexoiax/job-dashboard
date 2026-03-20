@@ -392,12 +392,11 @@ Quy tắc bắt buộc:
 
   const userMsg = `Thông tin job:\n${jobInfo}\n\nThông tin ứng viên:\n${candidateInfo}${extraNote ? `\n\nGhi chú thêm từ ứng viên: ${extraNote}` : ""}\n\nViết email ứng tuyển theo chiến lược "${mindset.label}".`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  // Gọi qua Next.js API route để tránh CORS — không gọi thẳng Groq từ browser
+  const res = await fetch("/api/ai-email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
       system: systemPrompt,
       messages: [{ role: "user", content: userMsg }],
     }),
