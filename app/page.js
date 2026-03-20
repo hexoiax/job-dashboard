@@ -369,28 +369,81 @@ Hình thức: ${job.workMode || ""}
 Lương: ${job.salaryMax ? `đến ${Math.round(job.salaryMax / 1_000_000)}M VND` : "Thỏa thuận"}
   `.trim();
 
+  const hasPortfolio = !!profile.portfolioUrl;
+  const hasLinkedin  = !!profile.linkedinUrl;
+  const hasPhone     = !!profile.phone;
+
   const candidateInfo = `
 Tên: ${profile.fullName}
 Email: ${profile.email}
-${profile.phone ? `SĐT: ${profile.phone}` : ""}
-${profile.portfolioUrl ? `Portfolio: ${profile.portfolioUrl}` : ""}
-${profile.linkedinUrl ? `LinkedIn: ${profile.linkedinUrl}` : ""}
-${profile.defaultNote ? `Giới thiệu bản thân: ${profile.defaultNote}` : ""}
+${hasPhone     ? `SĐT: ${profile.phone}` : ""}
+${hasPortfolio ? `Portfolio: ${profile.portfolioUrl}` : ""}
+${hasLinkedin  ? `LinkedIn: ${profile.linkedinUrl}` : ""}
+${profile.defaultNote ? `Thông tin thêm về bản thân: ${profile.defaultNote}` : ""}
   `.trim();
 
-  const systemPrompt = `Bạn là chuyên gia viết email ứng tuyển cho thị trường Việt Nam, đặc biệt ngành E-commerce và Tech.
-Nhiệm vụ: Viết email ứng tuyển bằng tiếng Việt, chuyên nghiệp, tự nhiên, không sáo rỗng.
+  const systemPrompt = `Bạn là chuyên gia viết email ứng tuyển việc làm tại Việt Nam, chuyên ngành E-commerce và Tech.
+
+CHIẾN LƯỢC EMAIL: ${mindset.label}
 ${mindset.prompt}
 
-Quy tắc bắt buộc:
-- Viết bằng tiếng Việt, xưng "em" với nhà tuyển dụng
-- Không dùng từ sáo rỗng như "nhiệt huyết", "đam mê", "cầu tiến" một mình không có context
-- Tự nhiên như người thật viết, không có cảm giác AI-robot
-- Độ dài: 150–280 chữ (chiến lược Scannable thì ngắn hơn ~120 chữ)
-- KHÔNG viết Subject, chỉ viết phần body email
-- Chỉ xuất nội dung email, không giải thích thêm gì`;
+=== BỐ CỤC BẮT BUỘC (theo đúng thứ tự này) ===
 
-  const userMsg = `Thông tin job:\n${jobInfo}\n\nThông tin ứng viên:\n${candidateInfo}${extraNote ? `\n\nGhi chú thêm từ ứng viên: ${extraNote}` : ""}\n\nViết email ứng tuyển theo chiến lược "${mindset.label}".`;
+1. GREETING (1 dòng)
+   Chào anh/chị,
+
+2. HOOK + MATCH JD (1–2 dòng)
+   - Giới thiệu ngắn + nêu ngay điểm match với vị trí
+   - Cá nhân hoá theo tên công ty trong JD
+   - Ví dụ: "Em là [tên], có X năm kinh nghiệm [kỹ năng chính từ JD] và rất hứng thú với [điều cụ thể về công ty/vị trí]."
+
+3. BULLET ĐIỂM MẠNH (3–5 bullets, BẮT BUỘC dùng dấu gạch đầu dòng "-")
+   - Mỗi bullet = 1 kỹ năng/kinh nghiệm cụ thể khớp với JD
+   - Ưu tiên có số liệu hoặc ví dụ thực tế
+   - Ngắn gọn, scannable — HR đọc 10 giây là hiểu
+   - Ví dụ format:
+     - Custom Shopify theme (Liquid, sections, blocks) cho 3+ store quốc tế
+     - Convert Figma → UI responsive, mobile-first
+     - Sử dụng ChatGPT để debug và tăng tốc workflow
+
+4. GLOBAL/PRODUCT MINDSET (1 dòng, nếu JD có yếu tố quốc tế hoặc product)
+   - Ngắn, tự nhiên, không sáo
+   - Ví dụ: "Em cũng quan tâm đến tối ưu UX và conversion cho store hướng thị trường quốc tế."
+
+5. PORTFOLIO/LINK (nếu có thông tin)
+   - Xuất hiện trước CTA
+   - Format:
+     Portfolio: [link]
+     GitHub: [link]
+
+6. CTA + CLOSING (2 dòng)
+   - Câu chốt rõ ràng, mời phỏng vấn
+   - Cảm ơn ngắn gọn
+   - Ví dụ: "Em rất mong có cơ hội trao đổi thêm trong buổi phỏng vấn. Cảm ơn anh/chị đã xem xét."
+
+7. SIGNATURE
+   [Tên đầy đủ]
+   [Email]
+   [SĐT nếu có]
+
+=== QUY TẮC TUYỆT ĐỐI ===
+- Viết tiếng Việt, xưng "em"
+- KHÔNG viết Subject line
+- KHÔNG viết văn xuôi dài dòng — phải có bullets
+- KHÔNG dùng: "nhiệt huyết", "đam mê cháy bỏng", "cầu tiến", "mong nhận được hồi âm sớm"
+- KHÔNG thêm lời giải thích hay ghi chú ngoài nội dung email
+- Tự nhiên như người thật viết — không robot, không sáo
+- Chỉ xuất nội dung email body, không có gì khác`;
+
+  const userMsg = `Thông tin job:
+${jobInfo}
+
+Thông tin ứng viên:
+${candidateInfo}${extraNote ? `
+
+Ghi chú thêm: ${extraNote}` : ""}
+
+Viết email ứng tuyển theo chiến lược "${mindset.label}". Tuân thủ đúng bố cục 7 phần đã quy định.`;
 
   // Gọi qua Next.js API route để tránh CORS — không gọi thẳng Groq từ browser
   const res = await fetch("/api/ai-email", {
