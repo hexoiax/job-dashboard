@@ -250,22 +250,382 @@ function deriveOptions(jobs) {
   };
 }
 
-// Build email body từ template
-function buildEmailDraft(job, profile) {
-  const subject = `Ứng tuyển ${job["Vị Trí"]} - ${profile.fullName}`;
-  const body = `Xin chào ${job["Tên Công Ty"]} / Bộ phận tuyển dụng,
+// ─────────────────────────────────────────────────────────────
+// 10 BỘ TƯ DUY — AI Email Strategy Config
+// ─────────────────────────────────────────────────────────────
+const MINDSETS = [
+  {
+    id: "match_jd",
+    icon: "🎯",
+    label: "Match 1–1 JD",
+    short: "Bám sát từng yêu cầu tuyển dụng",
+    color: "#B8621A",
+    bg: "#FFF8F2",
+    border: "#F0C8A0",
+    prompt: `Viết email ứng tuyển theo chiến lược "Match 1–1 JD": mỗi yêu cầu trong JD phải được phản ánh trực tiếp bằng 1 câu cụ thể trong email. Bám sát từ khóa trong mô tả công việc, đề cập kỹ năng cụ thể mà JD yêu cầu.`,
+  },
+  {
+    id: "proof",
+    icon: "🧠",
+    label: "Proof > Claim",
+    short: "Chứng minh bằng số liệu, không kể lể",
+    color: "#1A5A8A",
+    bg: "#EEF6FF",
+    border: "#9ECEF5",
+    prompt: `Viết email ứng tuyển theo chiến lược "Proof > Claim": thay vì nói "em biết", hãy nói "em đã làm" với ví dụ cụ thể, số liệu, kết quả đo được. Mỗi kỹ năng phải đi kèm bằng chứng thực tế.`,
+  },
+  {
+    id: "ai_native",
+    icon: "⚡",
+    label: "AI-native",
+    short: "Highlight việc dùng AI tools thành thạo",
+    color: "#6B3EA8",
+    bg: "#F5EEFF",
+    border: "#C9A8F5",
+    prompt: `Viết email ứng tuyển theo chiến lược "AI-native candidate": làm nổi bật việc ứng viên biết tận dụng AI tools (ChatGPT, Claude…) để làm việc nhanh hơn và hiệu quả hơn. Đây là lợi thế cạnh tranh cần highlight rõ.`,
+  },
+  {
+    id: "builder",
+    icon: "🚀",
+    label: "Builder mindset",
+    short: "Người xây sản phẩm, không chỉ code",
+    color: "#3E6B48",
+    bg: "#F0F8EC",
+    border: "#A8D8A8",
+    prompt: `Viết email ứng tuyển theo chiến lược "Builder mindset": không nói "em làm frontend" mà nói "em quan tâm đến trải nghiệm người dùng và xây dựng sản phẩm". Nhấn mạnh tư duy sản phẩm, UX, và đóng góp vào business outcome.`,
+  },
+  {
+    id: "global",
+    icon: "🌍",
+    label: "Global Ecom Angle",
+    short: "Kinh nghiệm thị trường US/EU quốc tế",
+    color: "#A83030",
+    bg: "#FEF0F0",
+    border: "#F5AAAA",
+    prompt: `Viết email ứng tuyển theo chiến lược "Global Ecom Angle": nhấn mạnh kinh nghiệm làm việc với thị trường quốc tế, Shopify global, hiểu buyer behavior US/EU, currency, cross-border UX.`,
+  },
+  {
+    id: "self_learner",
+    icon: "💡",
+    label: "Chủ động – tự học",
+    short: "Culture fit: tự research, không cần hand-hold",
+    color: "#7A6200",
+    bg: "#FFFBEA",
+    border: "#F5D97A",
+    prompt: `Viết email ứng tuyển theo chiến lược "Tự học – Chủ động": thể hiện ứng viên chủ động tìm giải pháp, tự research, không cần nhiều hỗ trợ. Nhấn mạnh mindset growth và khả năng học nhanh qua documentation, cộng đồng, AI.`,
+  },
+  {
+    id: "scannable",
+    icon: "📋",
+    label: "Short – Sharp – Scannable",
+    short: "Bullet points, HR đọc 10 giây là hiểu ngay",
+    color: "#5E5040",
+    bg: "#F4F0EC",
+    border: "#CFC3B0",
+    prompt: `Viết email ứng tuyển theo chiến lược "Short–Sharp–Scannable": cấu trúc ngắn gọn với intro 2 dòng, 3–4 bullet points highlight kỹ năng chính, CTA rõ ràng. HR đọc 10–20 giây phải hiểu ngay ứng viên là ai.`,
+  },
+  {
+    id: "hook",
+    icon: "🏆",
+    label: "Micro-tailored hook",
+    short: "Câu mở khiến HR nghĩ email viết riêng cho họ",
+    color: "#B8621A",
+    bg: "#FFF8F2",
+    border: "#E8C9A0",
+    prompt: `Viết email ứng tuyển theo chiến lược "Micro-tailored hook": tạo câu mở cực kỳ cá nhân hóa khiến nhà tuyển dụng cảm giác email viết riêng cho công ty họ. Đề cập tên công ty, sản phẩm cụ thể, hoặc điều gì đó nổi bật về job description.`,
+  },
+  {
+    id: "portfolio",
+    icon: "📦",
+    label: "Portfolio-first",
+    short: "Đẩy link project thực tế lên đầu email",
+    color: "#1A7F4B",
+    bg: "#E6F9F0",
+    border: "#9FDFBF",
+    prompt: `Viết email ứng tuyển theo chiến lược "Portfolio-first": đưa link portfolio, GitHub, case study lên sớm trong email. Với dev/designer, portfolio thuyết phục hơn bất kỳ lời nào. Viết email ngắn + dẫn thẳng đến công việc thực tế.`,
+  },
+  {
+    id: "cta",
+    icon: "🎯",
+    label: "CTA rõ ràng – chốt nhẹ",
+    short: "Kết thúc bằng câu action rõ ràng, không mờ nhạt",
+    color: "#1A5A8A",
+    bg: "#EEF6FF",
+    border: "#9ECEF5",
+    prompt: `Viết email ứng tuyển theo chiến lược "CTA rõ ràng": kết thúc email bằng câu chốt nhẹ nhưng rõ ràng, mời nhà tuyển dụng phỏng vấn hoặc trao đổi thêm. Không kết thúc mờ nhạt kiểu "em mong nhận được hồi âm".`,
+  },
+];
 
-Tôi là ${profile.fullName}, tôi muốn ứng tuyển vào vị trí ${job["Vị Trí"]}.
+// ─────────────────────────────────────────────────────────────
+// AI EMAIL GENERATOR
+// ─────────────────────────────────────────────────────────────
+async function generateEmailAI({ job, profile, mindset, extraNote }) {
+  const jobInfo = `
+Vị trí: ${job["Vị Trí"] || ""}
+Công ty: ${job["Tên Công Ty"] || ""}
+Mô tả công việc: ${(job["Nội Dung Gốc"] || "").slice(0, 800)}
+Kỹ năng yêu cầu: ${job["Kỹ Năng"] || ""}
+Hình thức: ${job.workMode || ""}
+Lương: ${job.salaryMax ? `đến ${Math.round(job.salaryMax / 1_000_000)}M VND` : "Thỏa thuận"}
+  `.trim();
 
-${profile.defaultNote || "Tôi có kinh nghiệm phù hợp với vị trí này và rất mong được đóng góp cho công ty."}
+  const candidateInfo = `
+Tên: ${profile.fullName}
+Email: ${profile.email}
+${profile.phone ? `SĐT: ${profile.phone}` : ""}
+${profile.portfolioUrl ? `Portfolio: ${profile.portfolioUrl}` : ""}
+${profile.linkedinUrl ? `LinkedIn: ${profile.linkedinUrl}` : ""}
+${profile.defaultNote ? `Giới thiệu bản thân: ${profile.defaultNote}` : ""}
+  `.trim();
 
-Tôi đã đính kèm CV trong email này để anh/chị tham khảo.
-Rất mong có cơ hội trao đổi thêm.
+  const systemPrompt = `Bạn là chuyên gia viết email ứng tuyển cho thị trường Việt Nam, đặc biệt ngành E-commerce và Tech.
+Nhiệm vụ: Viết email ứng tuyển bằng tiếng Việt, chuyên nghiệp, tự nhiên, không sáo rỗng.
+${mindset.prompt}
 
-Trân trọng,
-${profile.fullName}
-${profile.email}${profile.phone ? "\n" + profile.phone : ""}${profile.portfolioUrl ? "\nPortfolio: " + profile.portfolioUrl : ""}${profile.linkedinUrl ? "\nLinkedIn: " + profile.linkedinUrl : ""}`;
-  return { subject, body };
+Quy tắc bắt buộc:
+- Viết bằng tiếng Việt, xưng "em" với nhà tuyển dụng
+- Không dùng từ sáo rỗng như "nhiệt huyết", "đam mê", "cầu tiến" một mình không có context
+- Tự nhiên như người thật viết, không có cảm giác AI-robot
+- Độ dài: 150–280 chữ (chiến lược Scannable thì ngắn hơn ~120 chữ)
+- KHÔNG viết Subject, chỉ viết phần body email
+- Chỉ xuất nội dung email, không giải thích thêm gì`;
+
+  const userMsg = `Thông tin job:\n${jobInfo}\n\nThông tin ứng viên:\n${candidateInfo}${extraNote ? `\n\nGhi chú thêm từ ứng viên: ${extraNote}` : ""}\n\nViết email ứng tuyển theo chiến lược "${mindset.label}".`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMsg }],
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "API error");
+  return data.content?.find(b => b.type === "text")?.text || "";
+}
+
+// ─────────────────────────────────────────────────────────────
+// MINDSET CARD
+// ─────────────────────────────────────────────────────────────
+function MindsetCard({ m, selected, onClick }) {
+  const active = selected === m.id;
+  return (
+    <button
+      onClick={() => onClick(m.id)}
+      style={{
+        display:"flex", alignItems:"flex-start", gap:10,
+        padding:"11px 14px",
+        border:`1.5px solid ${active ? m.color : "var(--border)"}`,
+        borderRadius:8,
+        background: active ? m.bg : "white",
+        cursor:"pointer", textAlign:"left",
+        transition:"all 0.18s cubic-bezier(0.34,1.56,0.64,1)",
+        transform: active ? "scale(1.02)" : "scale(1)",
+        boxShadow: active ? `0 4px 16px ${m.color}22` : "var(--shadow)",
+        fontFamily:"'Jost',sans-serif", width:"100%",
+      }}
+    >
+      <span style={{fontSize:18,flexShrink:0,marginTop:1}}>{m.icon}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+          <span style={{fontSize:13,fontWeight:700,color:active?m.color:"var(--ink)",transition:"color 0.15s"}}>{m.label}</span>
+          {active && (
+            <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",background:m.color,color:"white",borderRadius:3,padding:"2px 6px",fontFamily:"Inconsolata,monospace",textTransform:"uppercase"}}>CHỌN</span>
+          )}
+        </div>
+        <span style={{fontSize:11,color:"var(--ink3)",lineHeight:1.4}}>{m.short}</span>
+      </div>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMPOSE STEP — AI-powered (thay thế bước soạn email cũ)
+// ─────────────────────────────────────────────────────────────
+function ComposeStep({ job, profile, subject, setSubject, body, setBody, setDirty, onBack, onNext }) {
+  const [selectedMindset, setSelectedMindset] = useState("match_jd");
+  const [extraNote, setExtraNote]             = useState("");
+  const [generating, setGenerating]           = useState(false);
+  const [genError, setGenError]               = useState("");
+  const [phase, setPhase]                     = useState("select"); // "select" | "edit"
+  const [showAll, setShowAll]                 = useState(false);
+
+  const visibleMindsets = showAll ? MINDSETS : MINDSETS.slice(0, 6);
+  const activeMindset   = MINDSETS.find(m => m.id === selectedMindset);
+
+  const handleGenerate = useCallback(async () => {
+    setGenerating(true); setGenError("");
+    try {
+      const emailBody = await generateEmailAI({ job, profile, mindset: activeMindset, extraNote });
+      setSubject(`Ứng tuyển ${job["Vị Trí"]} - ${profile.fullName}`);
+      setBody(emailBody);
+      setDirty(true);
+      setPhase("edit");
+    } catch(e) {
+      setGenError(e.message || "Có lỗi xảy ra, thử lại.");
+    } finally {
+      setGenerating(false);
+    }
+  }, [job, profile, activeMindset, extraNote, setSubject, setBody, setDirty]);
+
+  const handleRegenerate = useCallback(async () => {
+    setGenerating(true); setGenError("");
+    try {
+      const emailBody = await generateEmailAI({ job, profile, mindset: activeMindset, extraNote });
+      setBody(emailBody);
+      setDirty(true);
+    } catch(e) {
+      setGenError(e.message || "Có lỗi xảy ra, thử lại.");
+    } finally {
+      setGenerating(false);
+    }
+  }, [job, profile, activeMindset, extraNote, setBody, setDirty]);
+
+  // ── PHASE: chọn chiến lược ──
+  if (phase === "select") {
+    return (
+      <div style={{padding:"20px 24px 28px",flex:1,display:"flex",flexDirection:"column"}}>
+        <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:14}}>
+          Chọn chiến lược email
+        </p>
+
+        {/* Mindset list */}
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
+          {visibleMindsets.map(m => (
+            <MindsetCard key={m.id} m={m} selected={selectedMindset} onClick={setSelectedMindset} />
+          ))}
+        </div>
+
+        {/* Show more */}
+        <button
+          onClick={() => setShowAll(v => !v)}
+          style={{fontSize:12,fontWeight:600,color:"var(--ink3)",background:"none",border:"none",cursor:"pointer",fontFamily:"'Jost',sans-serif",padding:"4px 0",textDecoration:"underline",textAlign:"left",marginBottom:16}}
+        >
+          {showAll ? "Thu gọn ↑" : `Xem thêm ${MINDSETS.length - 6} chiến lược khác ↓`}
+        </button>
+
+        {/* Extra note */}
+        <div style={{marginBottom:16}}>
+          <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:8}}>
+            Ghi chú thêm cho AI (tuỳ chọn)
+          </p>
+          <textarea
+            value={extraNote}
+            onChange={e => setExtraNote(e.target.value)}
+            placeholder="VD: Em có 2 năm kinh nghiệm Shopify, portfolio tại shopify.dev/abc, muốn nhấn mạnh kinh nghiệm mobile UX..."
+            rows={3}
+            style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:13,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box"}}
+          />
+        </div>
+
+        {/* Error */}
+        {genError && (
+          <div style={{background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:6,padding:"10px 14px",marginBottom:14,fontSize:12,color:"var(--red)",fontFamily:"Inconsolata,monospace"}}>
+            ⚠️ {genError}
+          </div>
+        )}
+
+        {/* Active mindset badge */}
+        {activeMindset && (
+          <div style={{display:"flex",alignItems:"center",gap:8,background:activeMindset.bg,border:`1px solid ${activeMindset.border}`,borderRadius:6,padding:"10px 14px",marginBottom:16}}>
+            <span style={{fontSize:16}}>{activeMindset.icon}</span>
+            <div>
+              <span style={{fontSize:12,fontWeight:700,color:activeMindset.color}}>{activeMindset.label}</span>
+              <span style={{fontSize:11,color:"var(--ink3)",marginLeft:8}}>{activeMindset.short}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onBack} style={{flex:1,padding:"14px",border:"1.5px solid var(--border)",borderRadius:6,background:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Jost',sans-serif",color:"var(--ink2)"}}>
+            ← Quay lại
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            style={{flex:2,padding:"14px",background:generating?"var(--ink3)":"var(--ink)",color:"var(--bg)",border:"none",borderRadius:6,fontSize:14,fontWeight:700,cursor:generating?"not-allowed":"pointer",fontFamily:"'Jost',sans-serif",letterSpacing:"0.06em",textTransform:"uppercase",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all 0.2s ease"}}
+          >
+            {generating
+              ? <><span style={{display:"inline-block",animation:"spin 1s linear infinite",fontSize:16}}>✦</span> Đang tạo email…</>
+              : <>✦ AI Generate Email</>
+            }
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── PHASE: chỉnh sửa email đã generate ──
+  return (
+    <div style={{padding:"20px 24px 28px",flex:1,display:"flex",flexDirection:"column"}}>
+
+      {/* Top bar: badge + actions */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:10,flexWrap:"wrap"}}>
+        <div style={{display:"inline-flex",alignItems:"center",gap:6,background:activeMindset.bg,border:`1px solid ${activeMindset.border}`,borderRadius:20,padding:"5px 12px"}}>
+          <span style={{fontSize:13}}>{activeMindset.icon}</span>
+          <span style={{fontSize:11,fontWeight:700,color:activeMindset.color,fontFamily:"Inconsolata,monospace"}}>{activeMindset.label}</span>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={() => setPhase("select")} style={{fontSize:11,fontWeight:600,color:"var(--ink2)",background:"white",border:"1px solid var(--border)",borderRadius:20,padding:"5px 12px",cursor:"pointer",fontFamily:"'Jost',sans-serif"}}>
+            ↩ Đổi chiến lược
+          </button>
+          <button onClick={handleRegenerate} disabled={generating} style={{fontSize:11,fontWeight:700,color:generating?"var(--ink3)":"var(--acc)",background:generating?"var(--bg2)":"#FFF8F2",border:`1px solid ${generating?"var(--border)":"#E8C9A0"}`,borderRadius:20,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontFamily:"'Jost',sans-serif"}}>
+            {generating ? "…" : "✦ Viết lại"}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {genError && (
+        <div style={{background:"#FEF0F0",border:"1px solid #F5AAAA",borderRadius:6,padding:"10px 14px",marginBottom:12,fontSize:12,color:"var(--red)",fontFamily:"Inconsolata,monospace"}}>
+          ⚠️ {genError} — Nội dung cũ vẫn còn, bạn có thể sửa tay.
+        </div>
+      )}
+
+      {/* Subject */}
+      <div style={{marginBottom:12}}>
+        <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Tiêu đề *</p>
+        <input
+          value={subject}
+          onChange={e => { setSubject(e.target.value); setDirty(true); }}
+          style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:14,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",boxSizing:"border-box"}}
+        />
+      </div>
+
+      {/* Body */}
+      <div style={{marginBottom:8,flex:1}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Nội dung *</p>
+          <span style={{fontFamily:"Inconsolata,monospace",fontSize:10,color:"var(--ink3)"}}>{body.length} ký tự</span>
+        </div>
+        <textarea
+          value={body}
+          onChange={e => { setBody(e.target.value); setDirty(true); }}
+          rows={12}
+          style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:13,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",resize:"vertical",lineHeight:1.75,boxSizing:"border-box"}}
+        />
+      </div>
+
+      <p style={{fontSize:11,color:"var(--ink3)",fontFamily:"Inconsolata,monospace",marginBottom:18,lineHeight:1.5}}>
+        💡 Bạn có thể chỉnh sửa trực tiếp — AI tạo nháp, bạn hoàn thiện.
+      </p>
+
+      {/* Nav */}
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={() => setPhase("select")} style={{flex:1,padding:"14px",border:"1.5px solid var(--border)",borderRadius:6,background:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Jost',sans-serif",color:"var(--ink2)"}}>
+          ← Chiến lược
+        </button>
+        <button onClick={onNext} style={{flex:2,padding:"14px",background:"var(--ink)",color:"var(--bg)",border:"none",borderRadius:6,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Jost',sans-serif",letterSpacing:"0.06em",textTransform:"uppercase"}}>
+          Xem trước →
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -295,16 +655,13 @@ function QuickApplyModal({ job, onClose, onSuccess }) {
   const [subject, setSubject] = useState("");
   const [body, setBody]       = useState("");
 
-  // Khi profile đủ → auto-fill draft
+  // Validate profile rồi chuyển sang bước compose (AI sẽ generate email)
   function goToCompose() {
     const errs = {};
     if (!profile.fullName.trim()) errs.fullName = "Bắt buộc";
     if (!profile.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) errs.email = "Email không hợp lệ";
     if (!cvFile) { setCvError("Vui lòng chọn CV PDF"); return; }
     if (Object.keys(errs).length) { setProfileErrors(errs); return; }
-    const draft = buildEmailDraft(job, profile);
-    setSubject(draft.subject);
-    setBody(draft.body);
     setStep("compose");
   }
 
@@ -484,42 +841,17 @@ function QuickApplyModal({ job, onClose, onSuccess }) {
           </div>
         )}
 
-        {/* STEP: compose */}
+        {/* STEP: compose — AI-powered */}
         {step === "compose" && (
-          <div style={{padding:"20px 24px 24px",flex:1}}>
-            <p style={{fontFamily:"Inconsolata,monospace",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.14em",color:"var(--ink3)",marginBottom:16}}>Soạn email ứng tuyển</p>
-
-            <div style={{marginBottom:12}}>
-              <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Gửi tới</p>
-              <div style={{padding:"10px 14px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:6,fontSize:13,color:"var(--ink2)",fontFamily:"Inconsolata,monospace"}}>
-                {job["Email"]}
-              </div>
-            </div>
-
-            <div style={{marginBottom:12}}>
-              <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Tiêu đề *</p>
-              <input
-                value={subject}
-                onChange={e => { setSubject(e.target.value); setDirty(true); }}
-                style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:14,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",boxSizing:"border-box"}}
-              />
-            </div>
-
-            <div style={{marginBottom:20}}>
-              <p style={{fontSize:11,fontFamily:"Inconsolata,monospace",color:"var(--ink3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Nội dung *</p>
-              <textarea
-                value={body}
-                onChange={e => { setBody(e.target.value); setDirty(true); }}
-                rows={10}
-                style={{width:"100%",padding:"12px 14px",border:"1.5px solid var(--border)",borderRadius:6,fontSize:13,fontFamily:"'Jost',sans-serif",color:"var(--ink)",background:"white",outline:"none",resize:"vertical",lineHeight:1.7,boxSizing:"border-box"}}
-              />
-            </div>
-
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={() => setStep("profile")} style={{flex:1,padding:"14px",border:"1.5px solid var(--border)",borderRadius:6,background:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Jost',sans-serif",color:"var(--ink2)"}}>← Quay lại</button>
-              <button className="apply-btn" style={{flex:2}} onClick={() => setStep("preview")}>Xem trước →</button>
-            </div>
-          </div>
+          <ComposeStep
+            job={job}
+            profile={profile}
+            subject={subject}   setSubject={setSubject}
+            body={body}         setBody={setBody}
+            setDirty={setDirty}
+            onBack={() => setStep("profile")}
+            onNext={() => setStep("preview")}
+          />
         )}
 
         {/* STEP: preview */}
