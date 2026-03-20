@@ -15,7 +15,7 @@ const SHEET_API           = process.env.SHEET_API!;
 
 const MAX_CV_SIZE = 5 * 1024 * 1024;
 
-// Dòng signature ẩn — user không thấy, chỉ recruiter nhận được
+// Signature ẩn append vào mail gửi recruiter — user không thấy
 const COMMUNITY_SIGNATURE = `
 
 ---
@@ -48,7 +48,7 @@ async function uploadCvToDrive(
   };
 }
 
-// ─── SHEET: Applications ──────────────────────────────────────
+// ─── SHEET: Applications ─────────────────────────────────────
 async function writeApplicationToSheet(row: Record<string, string>) {
   const res = await fetch(`${SHEET_API}/Applications`, {
     method: "POST",
@@ -105,7 +105,7 @@ async function upsertCandidateProfile(profile: {
   }
 }
 
-// ─── DEDUPE ───────────────────────────────────────────────────
+// ─── DEDUPE ──────────────────────────────────────────────────
 async function checkDuplicate(jobId: string, candidateEmail: string): Promise<boolean> {
   try {
     const res = await fetch(`${SHEET_API}/Applications`);
@@ -117,9 +117,10 @@ async function checkDuplicate(jobId: string, candidateEmail: string): Promise<bo
   }
 }
 
-// ─── MAIL ─────────────────────────────────────────────────────
-async function sendMail(opts: {
+// ─── MAIL 1: Gửi recruiter (CC ứng viên) ─────────────────────
+async function sendMailToRecruiter(opts: {
   to: string;
+  cc: string;
   replyTo: string;
   subject: string;
   body: string;
@@ -133,18 +134,19 @@ async function sendMail(opts: {
     auth: { user: MAIL_USER, pass: MAIL_PASS },
   });
 
-  // Tự động append community signature — user không thấy, recruiter nhận được
+  // Append community signature ẩn vào mail recruiter
   const bodyWithSignature = opts.body + COMMUNITY_SIGNATURE;
 
   const info = await transporter.sendMail({
-    from: `"Da Nang Ecom Jobs" <${MAIL_USER}>`,
-    to: opts.to,
+    from:    `"Da Nang Ecom Jobs" <${MAIL_USER}>`,
+    to:      opts.to,
+    cc:      opts.cc,        // ứng viên được CC — thấy y chang recruiter
     replyTo: opts.replyTo,
     subject: opts.subject,
-    text: bodyWithSignature,
+    text:    bodyWithSignature,
     attachments: [{
-      filename: opts.cvFileName,
-      content: opts.cvBuffer,
+      filename:    opts.cvFileName,
+      content:     opts.cvBuffer,
       contentType: "application/pdf",
     }],
   });
@@ -152,7 +154,61 @@ async function sendMail(opts: {
   return info.messageId || "";
 }
 
-// ─── HANDLER ──────────────────────────────────────────────────
+// ─── MAIL 2: Xác nhận riêng cho ứng viên ─────────────────────
+async function sendConfirmationToCandidate(opts: {
+  to: string;
+  candidateName: string;
+  jobTitle: string;
+  companyName: string;
+  subject: string;
+  body: string;
+  cvFileName: string;
+  cvBuffer: Buffer;
+}): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: MAIL_USER, pass: MAIL_PASS },
+  });
+
+  const confirmBody = `Chào ${opts.candidateName},
+
+Hệ thống DaNangEcom đã gửi email ứng tuyển của bạn thành công! 🎉
+
+─────────────────────────────
+📋 Thông tin đơn ứng tuyển
+─────────────────────────────
+Vị trí  : ${opts.jobTitle}
+Công ty : ${opts.companyName}
+Tiêu đề : ${opts.subject}
+─────────────────────────────
+
+Nội dung email đã gửi:
+${opts.body}
+
+─────────────────────────────
+
+Nhà tuyển dụng sẽ trả lời trực tiếp vào hộp thư này.
+
+Chúc bạn sớm nhận được tin vui! 💪
+Cộng đồng Việc làm E-com POD, DROPSHIP Đà Nẵng, Cross-Border
+https://www.facebook.com/groups/1195564331465005/`;
+
+  await transporter.sendMail({
+    from:    `"Da Nang Ecom Jobs" <${MAIL_USER}>`,
+    to:      opts.to,
+    subject: `[Xác nhận] Đã nộp đơn: ${opts.jobTitle} tại ${opts.companyName}`,
+    text:    confirmBody,
+    attachments: [{
+      filename:    opts.cvFileName,
+      content:     opts.cvBuffer,
+      contentType: "application/pdf",
+    }],
+  });
+}
+
+// ─── HANDLER ─────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -168,7 +224,7 @@ export async function POST(req: NextRequest) {
     const candidateEmail = (formData.get("candidateEmail") as string || "").trim();
     const candidatePhone = (formData.get("candidatePhone") as string || "").trim();
 
-    // ── Validate ─────────────────────────────────────────────
+    // ── Validate ──────────────────────────────────────────────
     if (!cvFile)
       return NextResponse.json({ error: { code: "NO_CV", message: "Thiếu file CV" } }, { status: 400 });
     if (cvFile.type !== "application/pdf")
@@ -182,18 +238,18 @@ export async function POST(req: NextRequest) {
     if (!subject || !body)
       return NextResponse.json({ error: { code: "MISSING_CONTENT", message: "Thiếu tiêu đề hoặc nội dung" } }, { status: 400 });
 
-    // ── Dedupe ───────────────────────────────────────────────
+    // ── Dedupe ────────────────────────────────────────────────
     const isDuplicate = await checkDuplicate(jobId, candidateEmail);
     if (isDuplicate)
       return NextResponse.json({ error: { code: "DUPLICATE_APPLY", message: "Bạn đã ứng tuyển vị trí này rồi" } }, { status: 409 });
 
-    // ── CV buffer ────────────────────────────────────────────
+    // ── CV buffer ─────────────────────────────────────────────
     const cvBuffer = Buffer.from(await cvFile.arrayBuffer());
     const timestamp = Date.now();
     const safeEmail = candidateEmail.replace(/[^a-z0-9]/gi, "_");
     const storedFileName = `${safeEmail}_${timestamp}_cv.pdf`;
 
-    // ── Upload Drive ─────────────────────────────────────────
+    // ── Upload Drive ──────────────────────────────────────────
     let driveLink = "";
     try {
       const uploaded = await uploadCvToDrive(cvBuffer, storedFileName, "application/pdf");
@@ -205,11 +261,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Gửi mail ─────────────────────────────────────────────
+    // ── Gửi mail recruiter (CC ứng viên) ─────────────────────
     let providerMessageId = "";
     try {
-      providerMessageId = await sendMail({
-        to: recruiterEmail,
+      providerMessageId = await sendMailToRecruiter({
+        to:      recruiterEmail,
+        cc:      candidateEmail,   // ứng viên CC — thấy y chang recruiter nhận
         replyTo: candidateEmail,
         subject, body, cvBuffer,
         cvFileName: cvFile.name || storedFileName,
@@ -218,12 +275,13 @@ export async function POST(req: NextRequest) {
       await writeApplicationToSheet({
         applicationId: `app_${timestamp}`,
         jobId, jobTitle, companyName,
-        companyEmail:  recruiterEmail,
-        userEmail:     candidateEmail,
-        userFullName:  candidateName,
-        userPhone:     candidatePhone,
-        cvDriveLink:   driveLink,
-        subject, bodySnapshot: body,
+        companyEmail:      recruiterEmail,
+        userEmail:         candidateEmail,
+        userFullName:      candidateName,
+        userPhone:         candidatePhone,
+        cvDriveLink:       driveLink,
+        subject,
+        bodySnapshot:      body,
         status:            "failed",
         providerMessageId: "",
         errorReason:       e.message,
@@ -236,17 +294,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Ghi Applications snapshot ────────────────────────────
+    // ── Gửi mail xác nhận riêng cho ứng viên (best-effort) ───
+    sendConfirmationToCandidate({
+      to:            candidateEmail,
+      candidateName, jobTitle, companyName,
+      subject, body,
+      cvFileName:    cvFile.name || storedFileName,
+      cvBuffer,
+    }).catch(e => console.warn("[confirmation-mail]", e.message));
+
+    // ── Ghi Applications snapshot ─────────────────────────────
     const applicationId = `app_${timestamp}`;
     await writeApplicationToSheet({
       applicationId,
       jobId, jobTitle, companyName,
-      companyEmail:  recruiterEmail,
-      userEmail:     candidateEmail,
-      userFullName:  candidateName,
-      userPhone:     candidatePhone,
-      cvDriveLink:   driveLink,
-      subject, bodySnapshot: body,
+      companyEmail:      recruiterEmail,
+      userEmail:         candidateEmail,
+      userFullName:      candidateName,
+      userPhone:         candidatePhone,
+      cvDriveLink:       driveLink,
+      subject,
+      bodySnapshot:      body,
       status:            "sent",
       providerMessageId,
       errorReason:       "",
