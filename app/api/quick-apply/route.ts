@@ -15,6 +15,13 @@ const SHEET_API           = process.env.SHEET_API!;
 
 const MAX_CV_SIZE = 5 * 1024 * 1024;
 
+// Dòng signature ẩn — user không thấy, chỉ recruiter nhận được
+const COMMUNITY_SIGNATURE = `
+
+---
+Ứng viên từ cộng đồng: Việc làm E-com POD, DROPSHIP Đà Nẵng, Cross-Border
+https://www.facebook.com/groups/1195564331465005/`;
+
 // ─── DRIVE ───────────────────────────────────────────────────
 async function uploadCvToDrive(
   buffer: Buffer,
@@ -65,7 +72,6 @@ async function upsertCandidateProfile(profile: {
     const exists = rows.some(r => r.email === profile.email);
 
     if (!exists) {
-      // Chưa có → tạo mới
       await fetch(`${SHEET_API}/CandidateProfiles`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,7 +88,6 @@ async function upsertCandidateProfile(profile: {
         }]),
       });
     } else {
-      // Đã có → cập nhật cv link + timestamp
       await fetch(`${SHEET_API}/CandidateProfiles`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -96,7 +101,6 @@ async function upsertCandidateProfile(profile: {
       });
     }
   } catch (e: any) {
-    // best-effort — không block luồng chính
     console.warn("[upsertCandidateProfile]", e.message);
   }
 }
@@ -129,12 +133,15 @@ async function sendMail(opts: {
     auth: { user: MAIL_USER, pass: MAIL_PASS },
   });
 
+  // Tự động append community signature — user không thấy, recruiter nhận được
+  const bodyWithSignature = opts.body + COMMUNITY_SIGNATURE;
+
   const info = await transporter.sendMail({
     from: `"Da Nang Ecom Jobs" <${MAIL_USER}>`,
     to: opts.to,
     replyTo: opts.replyTo,
     subject: opts.subject,
-    text: opts.body,
+    text: bodyWithSignature,
     attachments: [{
       filename: opts.cvFileName,
       content: opts.cvBuffer,
