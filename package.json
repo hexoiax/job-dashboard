@@ -11,5 +11,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
+    "nodemailer": "^6.9.13",
+"googleapis": "^140.0.0"
   }
 }
