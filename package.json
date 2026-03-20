@@ -13,5 +13,11 @@
     "react-dom": "latest",
     "nodemailer": "^6.9.13",
     "googleapis": "^140.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/react": "^18",
+    "@types/node": "^20",
+    "@types/nodemailer": "^6"
   }
 }
